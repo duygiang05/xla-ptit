@@ -1,0 +1,13 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+*.py[cod]
+.DS_Store
+# Local video and outputs should not be committed
+/data/**/*.mp4
+/data/**/*.avi
+/data/**/*.mov
+/data/**/*.mkv
+/outputs/**
+!/outputs/**/.gitkeep
