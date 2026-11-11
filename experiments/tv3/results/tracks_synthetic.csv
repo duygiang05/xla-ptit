@@ -1,0 +1,3 @@
+track_id,object,length,area_mean,area_cv,area_growth,perimeter_cv,circularity_std,centroid_shift,bbox_iou_mean
+1,flame (dao dong),30.0,6706.7667,0.3889,0.8369,0.2252,0.0168,4.081,0.6871
+2,lamp (dung yen),30.0,5044.6,0.023,0.0,0.0105,0.0018,0.0,0.9803

@@ -11,3 +11,4 @@ __pycache__/
 /data/**/*.mkv
 /outputs/**
 !/outputs/**/.gitkeep
+*.docx
