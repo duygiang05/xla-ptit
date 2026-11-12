@@ -1,0 +1,15 @@
+video_id,has_fire,has_smoke,frames_used,fire_cover_mean,fire_cover_max,smoke_cover_mean,smoke_cover_max,notes
+fs_smoke_pos02,1,1,20,0.034,0.0373,0.6826,0.7917,"NIST building fire, fire in window + smoke; NIST logo"
+fs_fire_pos01,1,1,20,0.037,0.073,0.6556,0.879,"burning wagon, black smoke; small FPS text top-left"
+fs_fire_pos03,1,0,20,0.0757,0.0949,0.4868,0.5923,brush fire close-up; slight shake 1.2 px
+fs_fire_pos04,1,0,20,0.324,0.359,0.0002,0.0005,"fireplace, dark brick background"
+fs_fire_pos05,1,0,20,0.4632,0.543,0.0014,0.002,fireplace
+fs_smoke_pos06,0,1,20,0.0002,0.0013,0.7612,0.8356,"smoke from bucket, people walking; fisheye; FPS text"
+fs_smoke_pos07,0,1,20,0.0012,0.0019,0.7607,0.7849,"smoke from bucket, person; fisheye; FPS text"
+fs_fire_neg02,0,0,20,0.0006,0.0014,0.4096,0.4828,"night street, car headlights"
+fs_fire_neg03,0,0,20,0.0012,0.005,0.2422,0.2895,"night street, headlights, people"
+fs_fire_neg11,0,0,20,0.0041,0.0112,0.6674,0.7255,red car passing (fire color + motion)
+fs_smoke_neg01,0,0,20,0.0,0.0,0.4651,0.4696,"tree with pink blossoms, clouds"
+fs_smoke_neg06,0,0,20,0.0018,0.0029,0.7068,0.7392,highway traffic
+fs_smoke_neg08,0,0,20,0.0348,0.0798,0.5796,0.7338,red/yellow flags waving (fire color + motion)
+fs_smoke_neg09,0,0,20,0.0199,0.0741,0.7889,0.8645,"highway traffic, orange truck"

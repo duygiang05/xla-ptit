@@ -159,9 +159,37 @@ def test_texture_filter_removes_textured_gray_keeps_flat_gray():
     wall = np.full((40, 40, 3), 125, np.uint8)
     assert _smoke_ratio(gravel, smoke_texture_max=12) < 0.05   # sỏi xám có vân: bị loại
     assert _smoke_ratio(wall, smoke_texture_max=12) == 1.0     # tường phẳng: vẫn giữ
-    assert _smoke_ratio(gravel) > 0.5                          # tắt lọc (mặc định): vẫn bắt
+    assert _smoke_ratio(gravel, smoke_texture_max=0) > 0.5     # tắt lọc: vẫn bắt
 
 
 def test_invalid_smoke_mode_raises():
     with pytest.raises(ValueError):
         _smoke_ratio((130, 130, 130), smoke_color_mode="abc")
+
+
+# ------------------------------------------------------------ lõi sáng của lửa
+from fireguard.color.fire_detection import add_fire_core
+
+
+def _flame_with_white_core():
+    """Vòng cam (lửa) bao quanh lõi trắng-vàng S thấp, và một đèn trắng đứng riêng ở xa."""
+    import cv2
+    frame = np.zeros((80, 160, 3), np.uint8)
+    cv2.circle(frame, (40, 40), 25, (0, 128, 255), -1)     # cam
+    cv2.circle(frame, (40, 40), 5, (215, 250, 255), -1)    # lõi trắng-vàng: S ~ 40, V = 255 (bán kính 5 < fire_core_dilate=7)
+    cv2.circle(frame, (130, 40), 8, (215, 250, 255), -1)   # đèn trắng đứng riêng
+    return frame
+
+
+def test_fire_core_fills_hole_but_ignores_isolated_white_light():
+    frame = _flame_with_white_core()
+    off = color_candidates(frame, replace(Config(), blur_kernel=1, fire_core_v_min=0))["fire"]
+    on = color_candidates(frame, replace(Config(), blur_kernel=1))["fire"]   # mặc định: bật
+    assert off[40, 40] == 0 and on[40, 40] == 255      # lõi được lấp
+    assert on[40, 130] == 0                            # đèn trắng ở xa không bị thêm
+
+
+def test_fire_core_noop_on_empty_mask():
+    hsv = np.zeros((10, 10, 3), np.uint8)
+    empty = np.zeros((10, 10), np.uint8)
+    assert np.array_equal(add_fire_core(empty, hsv, Config()), empty)

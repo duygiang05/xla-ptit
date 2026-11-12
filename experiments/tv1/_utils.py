@@ -7,7 +7,9 @@ import cv2
 def imwrite_unicode(path, img):
     """cv2.imwrite KHÔNG ghi được đường dẫn có dấu tiếng Việt trên Windows (trả False, không báo lỗi).
     Mã hóa ảnh trong bộ nhớ rồi để NumPy ghi file."""
-    ok, buf = cv2.imencode(Path(path).suffix, img)
+    ext = Path(path).suffix.lower()
+    params = [cv2.IMWRITE_JPEG_QUALITY, 85] if ext in (".jpg", ".jpeg") else []
+    ok, buf = cv2.imencode(ext, img, params)
     if not ok:
         raise IOError(f"Không mã hóa được ảnh: {path}")
     buf.tofile(str(path))

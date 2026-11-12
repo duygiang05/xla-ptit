@@ -47,7 +47,28 @@ def fire_mask_rgb(frame_bgr: np.ndarray, cfg: Config) -> np.ndarray:
     return ok.astype(np.uint8) * 255
 
 
+def add_fire_core(mask: np.ndarray, hsv: np.ndarray, cfg: Config) -> np.ndarray:
+    """Lấp "lõi sáng" vàng-trắng của ngọn lửa mà luật màu bỏ sót (S thấp vì quá sáng).
+
+    Lõi chỉ được nhận khi nằm trong vùng nở `fire_core_dilate` pixel quanh mask lửa hiện có:
+    lửa thật luôn có viền cam/đỏ bao quanh lõi, còn đèn trắng, mặt trời, tường trắng đứng riêng
+    thì không -> không bị thêm vào. Tắt khi fire_core_v_min <= 0.
+    """
+    if cfg.fire_core_v_min <= 0 or not mask.any():
+        return mask
+    core = cv2.inRange(hsv, np.array([0, 0, cfg.fire_core_v_min], np.uint8),
+                       np.array([179, cfg.fire_core_s_max, 255], np.uint8))
+    k = max(1, int(cfg.fire_core_dilate))
+    near = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)))
+    return cv2.bitwise_or(mask, cv2.bitwise_and(core, near))
+
+
 def fire_candidates(hsv: np.ndarray, cfg: Config, frame_bgr: np.ndarray | None = None) -> np.ndarray:
+    """Luật màu theo cfg.fire_color_mode, rồi (nếu bật) lấp lõi sáng."""
+    return add_fire_core(_fire_color_rules(hsv, cfg, frame_bgr), hsv, cfg)
+
+
+def _fire_color_rules(hsv: np.ndarray, cfg: Config, frame_bgr: np.ndarray | None = None) -> np.ndarray:
     """Kết hợp luật màu theo cfg.fire_color_mode.
 
     frame_bgr (ảnh BGR đã blur) chỉ cần khi mode dùng luật RGB; nếu không truyền,
