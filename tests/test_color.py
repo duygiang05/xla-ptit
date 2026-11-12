@@ -116,3 +116,52 @@ def test_fire_rules_output_format():
 def test_invalid_fire_mode_raises():
     with pytest.raises(ValueError):
         _fire_ratio((0, 128, 255), fire_color_mode="abc")
+
+
+# ------------------------------------------------------------ mask khói
+from fireguard.color.smoke_detection import local_std
+
+
+def _smoke_ratio(frame_or_bgr, **cfg_changes):
+    """Tỉ lệ pixel được đánh dấu khói (nhận ảnh hoặc một màu BGR -> ảnh 20x20)."""
+    frame = (frame_or_bgr if isinstance(frame_or_bgr, np.ndarray)
+             else np.full((20, 20, 3), frame_or_bgr, np.uint8))
+    cfg = replace(Config(), blur_kernel=1, **cfg_changes)
+    return np.count_nonzero(color_candidates(frame, cfg)['smoke']) / frame[:, :, 0].size
+
+
+@pytest.mark.parametrize("bgr, hsv_exp, rgb_exp", [
+    ((130, 130, 130), 1.0, 1.0),   # khói xám
+    ((66, 80, 92), 0.0, 1.0),      # khói xám đậm: S=72 > 70 nên HSV bỏ sót, RGB giữ được
+    ((0, 128, 255), 0.0, 0.0),     # cam lửa
+    ((20, 20, 20), 0.0, 0.0),      # quá tối
+    ((250, 250, 250), 0.0, 0.0),   # quá chói
+    ((200, 160, 110), 0.0, 0.0),   # trời xanh
+])
+def test_smoke_hsv_and_rgb_rules(bgr, hsv_exp, rgb_exp):
+    assert _smoke_ratio(bgr, smoke_color_mode="hsv") == hsv_exp
+    assert _smoke_ratio(bgr, smoke_color_mode="rgb") == rgb_exp
+    assert _smoke_ratio(bgr, smoke_color_mode="or") == max(hsv_exp, rgb_exp)
+    assert _smoke_ratio(bgr, smoke_color_mode="and") == min(hsv_exp, rgb_exp)
+
+
+def test_local_std_flat_vs_textured():
+    flat = np.full((40, 40), 120, np.uint8)
+    assert local_std(flat, 9).max() < 1e-3
+    rng = np.random.default_rng(2)
+    textured = np.clip(120 + rng.normal(0, 30, (40, 40)), 0, 255).astype(np.uint8)
+    assert local_std(textured, 9)[10:30, 10:30].mean() > 20
+
+
+def test_texture_filter_removes_textured_gray_keeps_flat_gray():
+    rng = np.random.default_rng(3)
+    gravel = np.clip(125 + rng.normal(0, 25, (40, 40, 1)), 0, 255).repeat(3, axis=2).astype(np.uint8)
+    wall = np.full((40, 40, 3), 125, np.uint8)
+    assert _smoke_ratio(gravel, smoke_texture_max=12) < 0.05   # sỏi xám có vân: bị loại
+    assert _smoke_ratio(wall, smoke_texture_max=12) == 1.0     # tường phẳng: vẫn giữ
+    assert _smoke_ratio(gravel) > 0.5                          # tắt lọc (mặc định): vẫn bắt
+
+
+def test_invalid_smoke_mode_raises():
+    with pytest.raises(ValueError):
+        _smoke_ratio((130, 130, 130), smoke_color_mode="abc")

@@ -31,6 +31,9 @@ sys.path.insert(0, str(ROOT))
 from fireguard.color import color_candidates  # noqa: E402
 from fireguard.config import Config  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _utils import imwrite_unicode, label  # noqa: E402
+
 OUT = ROOT / "experiments" / "tv1" / "results"
 H, W = 360, 640
 MODES = ("hsv", "rgb", "and", "or")
@@ -107,22 +110,6 @@ def count_speckles(mask, max_area=10):
     """Số đốm nhiễu tí hon (<= max_area pixel) – thứ blur cần loại bỏ."""
     n, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     return int(np.sum(stats[1:, cv2.CC_STAT_AREA] <= max_area))
-
-
-def imwrite_unicode(path, img):
-    """cv2.imwrite KHÔNG ghi được đường dẫn có dấu tiếng Việt trên Windows (trả False, không báo lỗi).
-    Mã hóa PNG trong bộ nhớ rồi để NumPy ghi file."""
-    ok, buf = cv2.imencode(Path(path).suffix, img)
-    if not ok:
-        raise IOError(f"Không mã hóa được ảnh: {path}")
-    buf.tofile(str(path))
-
-
-def label(img, text):
-    out = img.copy() if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    cv2.rectangle(out, (0, 0), (W, 26), (0, 0, 0), -1)
-    cv2.putText(out, text, (8, 19), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-    return out
 
 
 def main():

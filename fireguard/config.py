@@ -21,6 +21,15 @@ class Config:
     smoke_s_max: int = 70
     smoke_v_min: int = 65
     smoke_v_max: int = 230
+    # TV1 – luật "độ xám" RGB: max(B,G,R) - min(B,G,R) <= ngưỡng (khói gần như không màu).
+    #   Tăng nếu khói ngả vàng/xanh bị bỏ sót; giảm nếu bắt nhầm nhiều vật nhạt màu.
+    smoke_rgb_spread_max: int = 30
+    # TV1 – lọc độ mịn: độ lệch chuẩn cục bộ của ảnh xám <= ngưỡng (khói làm nhòe nền).
+    #   0 = TẮT. Bật (vd 12) để loại sỏi/đá/nhựa đường xám có vân; quá nhỏ sẽ bỏ sót khói mỏng.
+    smoke_texture_max: float = 0.0
+    smoke_texture_win: int = 9  # cửa sổ tính độ lệch chuẩn (pixel, số lẻ)
+    # TV1 – kết hợp luật màu khói: 'hsv' | 'rgb' | 'and' | 'or'.
+    smoke_color_mode: str = "hsv"
     motion_threshold: int = 18
     min_region_area: int = 130
     morph_kernel: int = 3

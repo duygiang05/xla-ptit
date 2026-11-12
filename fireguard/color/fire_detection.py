@@ -76,4 +76,4 @@ def color_candidates(frame_bgr: np.ndarray, cfg: Config) -> dict[str, np.ndarray
     check_frame(frame_bgr)
     blurred = denoise(frame_bgr, cfg.blur_kernel)
     hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
-    return {'fire': fire_candidates(hsv, cfg, blurred), 'smoke': smoke_candidates(hsv, cfg)}
+    return {'fire': fire_candidates(hsv, cfg, blurred), 'smoke': smoke_candidates(hsv, cfg, blurred)}
