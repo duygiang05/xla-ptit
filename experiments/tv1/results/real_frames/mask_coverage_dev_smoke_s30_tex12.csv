@@ -1,0 +1,3 @@
+video_id,has_fire,has_smoke,frames_used,fire_cover_mean,fire_cover_max,smoke_cover_mean,smoke_cover_max,notes
+fs_fire_pos01,1,1,20,0.037,0.073,0.3465,0.7176,"burning wagon, black smoke; small FPS text top-left"
+fs_smoke_pos02,1,1,20,0.034,0.0373,0.1085,0.1961,"NIST building fire, fire in window + smoke; NIST logo"

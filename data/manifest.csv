@@ -1,1 +1,31 @@
 video_id,filename,split,has_fire,has_smoke,source_url,license,original_video_id,owner,notes
+fs_smoke_pos02,fs_smoke_pos02.avi,development,1,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_pos02,TV1,"NIST building fire, fire in window + smoke; NIST logo"
+fs_fire_pos01,fs_fire_pos01.avi,development,1,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_pos01,TV1,"burning wagon, black smoke; small FPS text top-left"
+fs_fire_pos03,fs_fire_pos03.avi,development,1,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_pos03,TV1,brush fire close-up; slight shake 1.2 px
+fs_fire_pos04,fs_fire_pos04.avi,development,1,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fireplace,TV1,"fireplace, dark brick background"
+fs_fire_pos05,fs_fire_pos05.avi,development,1,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fireplace,TV1,fireplace
+fs_smoke_pos06,fs_smoke_pos06.avi,development,0,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_bucket_yard,TV1,"smoke from bucket, people walking; fisheye; FPS text"
+fs_smoke_pos07,fs_smoke_pos07.avi,development,0,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_bucket_yard,TV1,"smoke from bucket, person; fisheye; FPS text"
+fs_fire_neg02,fs_fire_neg02.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_night_street,TV1,"night street, car headlights"
+fs_fire_neg03,fs_fire_neg03.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_night_street,TV1,"night street, headlights, people"
+fs_fire_neg11,fs_fire_neg11.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_neg11,TV1,red car passing (fire color + motion)
+fs_smoke_neg01,fs_smoke_neg01.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg01,TV1,"tree with pink blossoms, clouds"
+fs_smoke_neg06,fs_smoke_neg06.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_highway,TV1,highway traffic
+fs_smoke_neg08,fs_smoke_neg08.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg08,TV1,red/yellow flags waving (fire color + motion)
+fs_smoke_neg09,fs_smoke_neg09.avi,development,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_highway,TV1,"highway traffic, orange truck"
+fs_fire_pos06,fs_fire_pos06.avi,integration,1,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_pos06,TV1,small field fire with smoke; FPS text
+fs_fire_pos07,fs_fire_pos07.avi,integration,1,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_pos07,TV1,"small fire near wall, field"
+fs_smoke_pos03,fs_smoke_pos03.avi,integration,0,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_pos03,TV1,"smoke over field; overexposed, low quality"
+fs_fire_neg10,fs_fire_neg10.avi,integration,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_neg10,TV1,"office, person with orange bag (fire color + motion)"
+fs_smoke_neg02,fs_smoke_neg02.avi,integration,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg02,TV1,people on grey asphalt (smoke color + motion)
+fs_smoke_neg05,fs_smoke_neg05.avi,integration,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg05,TV1,reeds moving in wind
+fs_fire_pos10,fs_fire_pos10.avi,test,1,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_ultimatechase,TV1,"forest fire, heavy smoke; watermark UltimateChase.com"
+fs_fire_pos11,fs_fire_pos11.avi,test,1,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_ultimatechase,TV1,"forest ground fire, firefighters; watermark"
+fs_smoke_pos08,fs_smoke_pos08.avi,test,1,1,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_pos08,TV1,smoke with red flare at base
+fs_fire_neg13,fs_fire_neg13.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_station,TV1,station crowd; camera OSD timestamp
+fs_fire_neg14,fs_fire_neg14.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_station,TV1,train platform; only 1.9 s
+fs_fire_neg15,fs_fire_neg15.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_neg15,TV1,"bridge, orange truck; only 2.9 s; 1600x1200"
+fs_fire_neg16,fs_fire_neg16.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_fire_neg16,TV1,"lake, person in red shirt; 1600x1200"
+fs_smoke_neg03,fs_smoke_neg03.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg03,TV1,office; only first 182/748 frames readable (~6 s)
+fs_smoke_neg04,fs_smoke_neg04.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg04,TV1,"people near fence, trees; 113 s"
+fs_smoke_neg07,fs_smoke_neg07.avi,test,0,0,https://zenodo.org/records/836749,"CC BY 4.0 (FIRESENSE, doi:10.5281/zenodo.836749)",fs_smoke_neg07,TV1,"trees, clouds, blue sky"
