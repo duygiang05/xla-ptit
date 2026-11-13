@@ -1,7 +1,8 @@
 # TV1 – Thí nghiệm 3: quét ngưỡng màu trên video thật (data/development)
 
 Lệnh: `python experiments/tv1/sweep_dev.py` (bảng trong `results/sweep/`) và
-`python experiments/tv1/visualize_frames.py [--set k=v ...] --tag <tên>` (ảnh trong `results/real_frames/`).
+`python experiments/tv1/visualize_frames.py [--set k=v ...] --tag <tên>` (ảnh trong `results/real_frames/`),
+`python experiments/tv1/compare_modes_real.py` (so sánh 4 luật màu, `sweep/modes_real.csv`).
 Dữ liệu: 14 video development của FIRESENSE (CC BY 4.0), 20 frame rải đều mỗi video, tổng 280 frame,
 resize giữ tỉ lệ ≤ 640×360. **Không dùng `data/test`.**
 
@@ -33,6 +34,30 @@ resize giữ tỉ lệ ≤ 640×360. **Không dùng `data/test`.**
 Số đốm nhiễu ≤ 10 px mỗi frame: lửa 31 → 9 → 5, khói 128 → 25 → 10 (kernel 1 → 5 → 9). recall và fpr
 gần như không đổi. Giữ kernel 5: giảm nhiễu mạnh mà ít làm mờ chi tiết ngọn lửa nhỏ.
 
+## So sánh 4 luật màu hsv / rgb / and / or (`sweep/modes_real.csv`)
+Thí nghiệm 1–2 chỉ so 4 luật trên ảnh tổng hợp; lưới quét ở trên chỉ có `hsv` và `and` cho lửa.
+Mục này chạy đủ 4 luật trên cùng 280 frame, giữ mọi ngưỡng ở mặc định cuối, chỉ đổi `*_color_mode`.
+
+**Lửa** (blur 5, có lõi sáng)
+| luật | recall | fpr | phủ có | phủ không | đốm/frame |
+|---|---|---|---|---|---|
+| **hsv** (chọn) | 1.00 | 0.27 | 20.6% | 0.73% | 9.9 |
+| rgb | 1.00 | 1.00 | 29.1% | 16.2% | 35.6 |
+| and | 1.00 | 0.18 | 18.4% | 0.44% | 8.1 |
+| or | 1.00 | 1.00 | 31.2% | 16.5% | 37.2 |
+
+**Khói** (blur 5; `and` trùng `hsv`, `or` trùng `rgb` vì luật RGB-xám chặt hơn HSV ở hầu hết pixel)
+| luật | lọc mịn | fpr | phủ có | phủ không | đốm/frame |
+|---|---|---|---|---|---|
+| **hsv / and** (chọn) | 12 | 0.78 | 32.4% | **11.5%** | 38.0 |
+| rgb / or | 12 | 0.80 | 48.5% | 20.6% | 39.8 |
+| hsv / and | tắt | 0.80 | 47.0% | 20.1% | 44.3 |
+| rgb / or | tắt | 0.80 | 67.7% | 40.4% | 23.8 |
+
+So với ảnh tổng hợp (thí nghiệm 1): HSV vẫn được chọn nhưng **vì lý do khác**. Trên ảnh tổng hợp RGB thua vì
+bỏ sót lửa (recall 0.67); trên video thật mọi luật đều recall 1.00, RGB thua vì **báo nhầm 100% frame
+không có lửa** (cờ, xe, tường nắng thỏa R ≥ G > B). AND từ "kém nhất" trên ảnh tổng hợp thành đối thủ sát nút.
+
 ## Nhận xét
 1. **Mask lửa tách khá tốt video có/không có lửa**: video âm tính chỉ bật 0–3.5% pixel. Nguồn báo nhầm
    là chữ đỏ trên cờ vàng, xe tải cam, quạt cam (`fs_smoke_pos02`), đúng loại "vật màu lửa" mà chuyển
@@ -43,6 +68,9 @@ gần như không đổi. Giữ kernel 5: giảm nhiễu mạnh mà ít làm m�
    khói phải được xác nhận bằng chuyển động và thời gian.
 3. **Tự động chọn theo một chỉ số dễ sai**: cả hai cấu hình "tốt nhất" theo fpr đều bỏ sót thứ quan trọng
    (khói đen, nửa ngọn lửa). Cần xem ảnh, và giữ ràng buộc về độ phủ.
+4. **HSV là luật đúng cho cả lửa và khói trên video thật**. RGB và OR bị loại hẳn (fpr lửa 1.00). AND giảm
+   fpr lửa 0.27 → 0.18 nhưng mất ~11% độ phủ lửa (20.6% → 18.4%); vì mask màu ưu tiên recall và chuyển
+   động/thời gian sẽ lọc tiếp, giữ HSV. AND là phương án dự phòng nếu cả pipeline còn quá nhiều báo nhầm.
 
 ## Ghi chú tái lập
 - Kết quả thí nghiệm 1, 2, 4 (cảnh tổng hợp) được tạo với **mặc định cũ** (`smoke_s_max=70`, không lọc

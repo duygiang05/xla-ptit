@@ -6,7 +6,7 @@ Chạy mọi lệnh từ thư mục gốc repo, trong môi trường `.venv`.
 |---|---|---|---|---|
 | 1 | Luật lửa RGB / HSV / AND / OR, có/không blur | `python experiments/tv1/compare_rgb_hsv.py` | cảnh tổng hợp | [NOTES_rgb_vs_hsv.md](results/NOTES_rgb_vs_hsv.md) |
 | 2 | Luật khói HSV / RGB-xám / lọc độ mịn, quét `smoke_s_max` | `python experiments/tv1/compare_smoke.py` | cảnh tổng hợp | [NOTES_smoke.md](results/NOTES_smoke.md) |
-| 3 | Quét ngưỡng lửa/khói, blur, lõi lửa trên video thật | `python experiments/tv1/sweep_dev.py` | `data/development` | [NOTES_sweep_dev.md](results/NOTES_sweep_dev.md) |
+| 3 | Quét ngưỡng lửa/khói, blur, lõi lửa, so 4 luật màu trên video thật | `python experiments/tv1/sweep_dev.py`, `python experiments/tv1/compare_modes_real.py` | `data/development` | [NOTES_sweep_dev.md](results/NOTES_sweep_dev.md) |
 | 4 | Chỉ màu so với màu + chuyển động (dùng TV2/TV3 như hộp đen) | `python experiments/tv1/color_vs_motion.py` | chuỗi tổng hợp | [NOTES_color_vs_motion.md](results/NOTES_color_vs_motion.md) |
 
 Công cụ:
