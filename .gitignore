@@ -11,4 +11,12 @@ __pycache__/
 /data/**/*.mkv
 /outputs/**
 !/outputs/**/.gitkeep
+
+# Generated experiment/demo results
+/experiments/results/**
+/experiments/tv2/results/**
+/experiments/tv3/results/frames/**
+/experiments/tv3/results/video_stats.csv
+/experiments/tv3/results/video_tracks.csv
+
 *.docx

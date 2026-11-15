@@ -14,7 +14,7 @@ from fireguard.motion.background import MOG2MotionDetector
 # 1. CAU HINH
 # ==============================
 
-VIDEO_PATH = "data/development/vd_khoi.mp4"
+VIDEO_PATH = "data/development/demo1_30fps.mp4"
 
 OUTPUT_DIR = Path("experiments/tv2/results")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
