@@ -7,6 +7,7 @@ Các đặc trưng đều bất biến tỉ lệ (trừ area/perimeter) để TV
 - aspect_ratio: w / h của bounding box thẳng.
 - extent      : A / (w*h), mức độ vùng lấp đầy bounding box.
 """
+
 from dataclasses import dataclass
 import math
 

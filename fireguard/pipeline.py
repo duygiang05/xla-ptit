@@ -1,54 +1,36 @@
+"""Pipeline video: TV1 màu, TV2 chuyển động, TV4 ghép, TV3 vùng, TV4 thời gian.
 
-"""FireGuard video detection pipeline.
-
-TV1: Color Detection
-TV2: Frame Difference / MOG2
-Fusion: Color + Motion
-TV3: Morphology + Region Extraction
-TV4: Tracking + Temporal Decision
-
-FIRE:
-    Frame Difference + Fusion + Temporal Vote
-
-SMOKE:
-    Frame Difference / MOG2
-    + Fusion
-    + Optional Shape + Edge verification
-    + Temporal Vote / Hybrid
-
-FIRE and SMOKE use separate TemporalFilter instances.
+FIRE và SMOKE có bộ lọc thời gian riêng; nhánh khói hỗ trợ xử lý theo bối cảnh.
 """
 
 import argparse
 import csv
+from collections import deque
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
 
 from .config import Config
 from .color import color_candidates
+from .color.smoke_context import context_smoke_candidates
 from .motion import MotionDetector, MOG2MotionDetector
+from .motion.flow import dense_flow_in_bounds
 from .fusion import fuse_masks
 from .shape import extract_regions
+from .shape.grouping import union_regions
+from .shape.context_verify import (
+    active_image_bounds,
+    extend_sky_plume,
+    verify_context_regions,
+)
 from .temporal import TemporalFilter
+from .presets import DEMO_OPTIONS
 
+FUSION_MODES = ("and", "and_dilate", "color_only", "region_motion")
 
-FUSION_MODES = (
-    "and",
-    "and_dilate",
-    "color_only",
-    "region_motion",
-)
+SMOKE_VERIFY_MODES = ("off", "shape_edge")
 
-SMOKE_VERIFY_MODES = (
-    "off",
-    "shape_edge",
-)
-
-
-# ============================================================
-# SMOKE: Shape + Edge Verification
-# ============================================================
 
 def verify_smoke_regions(
     regions,
@@ -57,30 +39,14 @@ def verify_smoke_regions(
     max_aspect_ratio=1.10,
     max_edge_density=0.02,
 ):
-    """Filter SMOKE candidates using shape and edge features.
+    """Lọc ứng viên khói theo tỉ lệ hộp và mật độ cạnh trong mask.
 
-    The candidate-region criteria were derived from
-    exploratory measurements on demo2.mp4 and dog.mp4.
-
-    Aspect ratio = bounding box width / height.
-
-    Edge density is calculated only on foreground
-    pixels of the smoke mask inside each region bbox.
-
-    This is experimental verification, not a trained
-    classifier and not a calibrated probability.
+    Ngưỡng được thử trên demo2/dog; đây không phải xác suất hay bộ phân loại.
     """
 
-    gray = cv2.cvtColor(
-        frame_bgr,
-        cv2.COLOR_BGR2GRAY,
-    )
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
 
-    edges = cv2.Canny(
-        gray,
-        50,
-        150,
-    )
+    edges = cv2.Canny(gray, 50, 150)
 
     verified = []
 
@@ -88,7 +54,7 @@ def verify_smoke_regions(
 
     for region in regions:
 
-        # TV3 already provides aspect ratio.
+        # TV3 đã tính sẵn tỉ lệ rộng/cao của hộp.
         if region.aspect_ratio > max_aspect_ratio:
             continue
 
@@ -97,7 +63,7 @@ def verify_smoke_regions(
         if w <= 0 or h <= 0:
             continue
 
-        # Clamp bbox to valid image coordinates.
+        # Chặn tọa độ hộp trong phạm vi ảnh.
         x1 = max(0, x)
         y1 = max(0, y)
         x2 = min(width, x + w)
@@ -106,22 +72,15 @@ def verify_smoke_regions(
         if x1 >= x2 or y1 >= y2:
             continue
 
-        roi_mask = (
-            smoke_mask[y1:y2, x1:x2] > 0
-        )
+        roi_mask = smoke_mask[y1:y2, x1:x2] > 0
 
         if not roi_mask.any():
             continue
 
-        roi_edges = edges[
-            y1:y2,
-            x1:x2,
-        ]
+        roi_edges = edges[y1:y2, x1:x2]
 
-        # Match the earlier feature-analysis method.
-        edge_density = float(
-            (roi_edges[roi_mask] > 0).mean()
-        )
+        # Chỉ tính mật độ cạnh trên các pixel thuộc mask khói.
+        edge_density = float((roi_edges[roi_mask] > 0).mean())
 
         if edge_density > max_edge_density:
             continue
@@ -131,9 +90,25 @@ def verify_smoke_regions(
     return verified
 
 
-# ============================================================
-# Main Pipeline
-# ============================================================
+def letterbox_frame(frame, width: int, height: int):
+    """Đưa frame vào khung cố định mà vẫn giữ tỉ lệ gốc."""
+    source_height, source_width = frame.shape[:2]
+    scale = min(width / source_width, height / source_height)
+    scaled_width = max(1, min(width, round(source_width * scale)))
+    scaled_height = max(1, min(height, round(source_height * scale)))
+    resized = cv2.resize(
+        frame,
+        (scaled_width, scaled_height),
+        interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR,
+    )
+    top = (height - scaled_height) // 2
+    bottom = height - scaled_height - top
+    left = (width - scaled_width) // 2
+    right = width - scaled_width - left
+    return cv2.copyMakeBorder(
+        resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(0, 0, 0)
+    )
+
 
 def run_video(
     input_path: str,
@@ -154,71 +129,57 @@ def run_video(
     smoke_verify: str = "off",
     smoke_max_aspect_ratio: float = 1.10,
     smoke_max_edge_density: float = 0.02,
+    single_box_per_kind: bool = False,
+    smoke_engine: str = "classical",
+    smoke_vote_hits: int | None = None,
 ) -> dict:
-    """Run integrated FIRE and SMOKE detection.
+    """Phân tích video, ghi MP4 và CSV cho hai nhánh FIRE/SMOKE.
 
-    FIRE always uses Frame Difference and Temporal Vote.
-
-    SMOKE may use MOG2, region-level fusion,
-    shape/edge verification, and temporal voting.
-
-    New verification is disabled by default
-    to preserve existing behavior.
+    FIRE dùng sai khác frame và bỏ phiếu thời gian; SMOKE tùy cấu hình dùng
+    MOG2, ghép theo vùng và xác minh hình dạng/cạnh. Mặc định của hàm giữ
+    hành vi cổ điển để tương thích; app truyền preset khói theo bối cảnh.
     """
 
     cfg = cfg or Config()
 
-    # --------------------------------------------------------
-    # Validate options
-    # --------------------------------------------------------
+    # Kiểm tra tham số trước khi mở video.
 
     if smoke_motion not in ("frame_diff", "mog2"):
-        raise ValueError(
-            "smoke_motion must be 'frame_diff' or 'mog2'"
-        )
+        raise ValueError("smoke_motion must be 'frame_diff' or 'mog2'")
+
+    if smoke_engine not in ("classical", "opencv_context"):
+        raise ValueError("smoke_engine must be 'classical' or 'opencv_context'")
+    if smoke_vote_hits is not None and not 1 <= smoke_vote_hits <= cfg.vote_window:
+        raise ValueError("smoke_vote_hits must be within the vote window")
 
     if smoke_temporal_mode not in ("vote", "hybrid"):
-        raise ValueError(
-            "smoke_temporal_mode must be 'vote' or 'hybrid'"
-        )
+        raise ValueError("smoke_temporal_mode must be 'vote' or 'hybrid'")
 
     if smoke_verify not in SMOKE_VERIFY_MODES:
-        raise ValueError(
-            f"smoke_verify must be one of {SMOKE_VERIFY_MODES}"
-        )
+        raise ValueError(f"smoke_verify must be one of {SMOKE_VERIFY_MODES}")
 
     if smoke_max_aspect_ratio <= 0:
-        raise ValueError(
-            "smoke_max_aspect_ratio must be positive"
-        )
+        raise ValueError("smoke_max_aspect_ratio must be positive")
 
     if not 0 <= smoke_max_edge_density <= 1:
-        raise ValueError(
-            "smoke_max_edge_density must be between 0 and 1"
-        )
+        raise ValueError("smoke_max_edge_density must be between 0 and 1")
 
     if smoke_motion_dilate is None:
         smoke_motion_dilate = motion_dilate
 
-    # --------------------------------------------------------
-    # Open input video
-    # --------------------------------------------------------
+    # Mở video đầu vào và chuẩn bị MP4 đầu ra.
 
     cap = cv2.VideoCapture(str(input_path))
 
     if not cap.isOpened():
-        raise ValueError(
-            f"Cannot read video: {input_path}"
-        )
+        raise ValueError(f"Cannot read video: {input_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    portrait_grays = deque(maxlen=5)
 
     out_path = Path(output_path)
 
-    out_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     writer = cv2.VideoWriter(
         str(out_path),
@@ -229,41 +190,31 @@ def run_video(
 
     if not writer.isOpened():
         cap.release()
-        raise ValueError(
-            f"Cannot write output video: {output_path}"
-        )
+        raise ValueError(f"Cannot write output video: {output_path}")
 
-    # --------------------------------------------------------
-    # TV2: Motion Detectors
-    # --------------------------------------------------------
+    # TV2: tạo bộ phát hiện chuyển động riêng cho hai nhánh.
 
     fire_motion_detector = MotionDetector(cfg)
 
     smoke_motion_detector = (
-        MOG2MotionDetector(
-            history=200,
-            var_threshold=16,
-        )
+        MOG2MotionDetector(history=200, var_threshold=16)
         if smoke_motion == "mog2"
         else None
     )
 
-    # --------------------------------------------------------
-    # TV4: Independent Temporal Filters
-    # --------------------------------------------------------
+    # TV4: bộ lọc thời gian FIRE và SMOKE độc lập.
 
-    fire_temporal = TemporalFilter(
-        cfg,
-        decision_mode="vote",
-    )
+    fire_temporal = TemporalFilter(cfg, decision_mode="vote")
 
     smoke_temporal = TemporalFilter(
-        cfg,
+        replace(cfg, vote_hits=smoke_vote_hits) if smoke_vote_hits is not None else cfg,
         decision_mode=smoke_temporal_mode,
     )
 
     frame_no = 0
     events = []
+    last_fire_region = None
+    last_fire_frame = -2
 
     try:
         while True:
@@ -272,36 +223,48 @@ def run_video(
             if not ok:
                 break
 
-            frame = cv2.resize(
-                frame,
-                (cfg.width, cfg.height),
-                interpolation=cv2.INTER_AREA,
+            frame = letterbox_frame(frame, cfg.width, cfg.height)
+            active_bounds = (
+                active_image_bounds(frame) if smoke_engine == "opencv_context" else None
             )
+            portrait_context = (
+                active_bounds is not None and active_bounds[2] < 0.6 * cfg.width
+            )
+            previous_portrait_gray = None
+            current_portrait_gray = None
+            if portrait_context:
+                previous_portrait_gray = (
+                    portrait_grays[-4] if len(portrait_grays) >= 4 else None
+                )
+                current_portrait_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                portrait_grays.append(current_portrait_gray)
 
-            # ====================================================
-            # TV1: Color Detection
-            # ====================================================
+            # TV1: tạo ứng viên màu.
 
             colors = color_candidates(frame, cfg)
+            context_sky_scene = False
+            context_aerial_tint = False
+            context_lower_smoke = None
+            if smoke_engine == "opencv_context":
+                (
+                    colors["smoke"],
+                    context_sky_scene,
+                    context_aerial_tint,
+                    context_lower_smoke,
+                ) = context_smoke_candidates(
+                    frame, colors["fire"], return_aerial_tint=True, return_lower=True
+                )
 
-            # ====================================================
-            # TV2: Motion Detection
-            # ====================================================
+            # TV2: phát hiện chuyển động.
 
-            fire_movement = fire_motion_detector.apply(
-                frame
-            )
+            fire_movement = fire_motion_detector.apply(frame)
 
             if smoke_motion_detector is not None:
-                smoke_movement = smoke_motion_detector.apply(
-                    frame
-                )
+                smoke_movement = smoke_motion_detector.apply(frame)
             else:
                 smoke_movement = fire_movement
 
-            # ====================================================
-            # Fusion: FIRE
-            # ====================================================
+            # TV4 Fusion: ghép mask lửa.
 
             fire_mask = fuse_masks(
                 colors["fire"],
@@ -310,42 +273,79 @@ def run_video(
                 motion_dilate=motion_dilate,
             )
 
-            # ====================================================
-            # Fusion: SMOKE
-            # ====================================================
+            # TV4 Fusion: ghép mask khói.
 
             smoke_mask = fuse_masks(
                 colors["smoke"],
                 smoke_movement,
-                mode=smoke_fusion,
-                motion_dilate=smoke_motion_dilate,
+                mode=(
+                    (
+                        "and_dilate"
+                        if context_aerial_tint
+                        else (
+                            "color_only"
+                            if context_sky_scene
+                            else "and_dilate" if portrait_context else "region_motion"
+                        )
+                    )
+                    if smoke_engine == "opencv_context"
+                    else smoke_fusion
+                ),
+                motion_dilate=(
+                    21
+                    if context_aerial_tint
+                    else (
+                        13
+                        if portrait_context and not context_sky_scene
+                        else smoke_motion_dilate
+                    )
+                ),
                 region_close=smoke_region_close,
                 region_motion_ratio=smoke_region_motion_ratio,
                 region_min_motion_pixels=smoke_region_min_motion_pixels,
                 region_min_area=smoke_region_min_area,
             )
 
-            # ====================================================
-            # TV3: Morphology + Region Extraction
-            # ====================================================
+            # TV3: làm sạch mask và trích vùng.
 
-            fire_regions = extract_regions(
-                fire_mask,
-                "fire",
-                cfg,
-            )
+            fire_regions = extract_regions(fire_mask, "fire", cfg)
 
-            smoke_regions = extract_regions(
-                smoke_mask,
-                "smoke",
-                cfg,
-            )
+            smoke_regions = extract_regions(smoke_mask, "smoke", cfg)
+            if smoke_engine == "opencv_context":
+                portrait_flow = None
+                if (
+                    portrait_context
+                    and not context_sky_scene
+                    and smoke_regions
+                    and previous_portrait_gray is not None
+                ):
+                    portrait_flow = dense_flow_in_bounds(
+                        previous_portrait_gray, current_portrait_gray, active_bounds
+                    )
+                smoke_regions = verify_context_regions(
+                    smoke_regions,
+                    frame,
+                    smoke_mask,
+                    context_sky_scene,
+                    aerial_tint=context_aerial_tint,
+                    motion_mask=smoke_movement,
+                    fire_regions=fire_regions,
+                    portrait_flow=portrait_flow,
+                )
+                if context_sky_scene and cv2.countNonZero(context_lower_smoke):
+                    lower_motion = cv2.dilate(
+                        smoke_movement,
+                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41)),
+                    )
+                    lower_mask = cv2.bitwise_and(context_lower_smoke, lower_motion)
+                    lower_regions = extract_regions(lower_mask, "smoke", cfg)
+                    smoke_regions = extend_sky_plume(
+                        smoke_regions, lower_regions, frame
+                    )
 
-            # ====================================================
-            # SMOKE: Experimental Shape + Edge Verification
-            # ====================================================
+            # Bộ lọc hình dạng/cạnh khói tùy chọn, đang thử nghiệm.
 
-            if smoke_verify == "shape_edge":
+            if smoke_engine != "opencv_context" and smoke_verify == "shape_edge":
                 smoke_regions = verify_smoke_regions(
                     regions=smoke_regions,
                     smoke_mask=smoke_mask,
@@ -354,27 +354,35 @@ def run_video(
                     max_edge_density=smoke_max_edge_density,
                 )
 
-            # ====================================================
-            # TV4: Independent Tracking + Temporal Decisions
-            # ====================================================
+            # TV4 Temporal: theo dõi và bỏ phiếu theo thời gian.
 
-            confirmed_fire = fire_temporal.update(
-                fire_regions,
-                frame_no,
-            )
+            confirmed_fire = fire_temporal.update(fire_regions, frame_no)
 
-            confirmed_smoke = smoke_temporal.update(
-                smoke_regions,
-                frame_no,
-            )
+            confirmed_smoke = smoke_temporal.update(smoke_regions, frame_no)
 
-            confirmed = (
-                confirmed_fire + confirmed_smoke
-            )
+            if confirmed_fire:
+                last_fire_region = union_regions(confirmed_fire, "fire")[0]
+                last_fire_frame = frame_no
+            elif (
+                single_box_per_kind
+                and last_fire_region is not None
+                and frame_no - last_fire_frame == 1
+            ):
+                x, y, w, h = last_fire_region.bbox
+                fire_color_roi = colors["fire"][y : y + h, x : x + w]
+                if fire_color_roi.size and cv2.countNonZero(fire_color_roi) >= max(
+                    20, int(0.02 * fire_color_roi.size)
+                ):
+                    confirmed_fire = [last_fire_region]
 
-            # ====================================================
-            # Draw Detection Results
-            # ====================================================
+            confirmed = confirmed_fire + confirmed_smoke
+
+            if single_box_per_kind:
+                confirmed = union_regions(confirmed_fire, "fire") + union_regions(
+                    confirmed_smoke, "smoke"
+                )
+
+            # Vẽ vùng đã xác nhận lên frame kết quả.
 
             annotated = frame.copy()
 
@@ -383,19 +391,9 @@ def run_video(
             for obj in confirmed:
                 x, y, w, h = obj.bbox
 
-                color = (
-                    (0, 0, 255)
-                    if obj.kind == "fire"
-                    else (255, 200, 0)
-                )
+                color = (0, 0, 255) if obj.kind == "fire" else (255, 200, 0)
 
-                cv2.rectangle(
-                    annotated,
-                    (x, y),
-                    (x + w, y + h),
-                    color,
-                    2,
-                )
+                cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
 
                 cv2.putText(
                     annotated,
@@ -407,16 +405,18 @@ def run_video(
                     2,
                 )
 
-                events.append([
-                    frame_no,
-                    round(timestamp, 3),
-                    obj.kind,
-                    x,
-                    y,
-                    w,
-                    h,
-                    obj.score,
-                ])
+                events.append(
+                    [
+                        frame_no,
+                        round(timestamp, 3),
+                        obj.kind,
+                        x,
+                        y,
+                        w,
+                        h,
+                        obj.score,
+                    ]
+                )
 
             writer.write(annotated)
 
@@ -426,35 +426,31 @@ def run_video(
         cap.release()
         writer.release()
 
-    # --------------------------------------------------------
-    # CSV Export
-    # --------------------------------------------------------
+    if frame_no == 0:
+        raise ValueError(f"Video contains no decodable frames: {input_path}")
+
+    # Ghi từng vùng theo frame vào CSV.
 
     if csv_path:
         csv_file = Path(csv_path)
 
-        csv_file.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        csv_file.parent.mkdir(parents=True, exist_ok=True)
 
-        with csv_file.open(
-            "w",
-            newline="",
-            encoding="utf-8",
-        ) as f:
+        with csv_file.open("w", newline="", encoding="utf-8") as f:
             csv_writer = csv.writer(f)
 
-            csv_writer.writerow([
-                "frame",
-                "timestamp_sec",
-                "kind",
-                "x",
-                "y",
-                "w",
-                "h",
-                "score",
-            ])
+            csv_writer.writerow(
+                [
+                    "frame",
+                    "timestamp_sec",
+                    "kind",
+                    "x",
+                    "y",
+                    "w",
+                    "h",
+                    "score",
+                ]
+            )
 
             csv_writer.writerows(events)
 
@@ -465,121 +461,104 @@ def run_video(
     }
 
 
-# ============================================================
-# Command-line Interface
-# ============================================================
+# Giao diện dòng lệnh.
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(
-        description="FireGuard FIRE/SMOKE detection"
-    )
+    parser = argparse.ArgumentParser(description="FireGuard FIRE/SMOKE detection")
 
-    parser.add_argument(
-        "--input",
-        required=True,
-    )
+    parser.add_argument("--input", required=True)
 
-    parser.add_argument(
-        "--output",
-        default="outputs/videos/out.mp4",
-    )
+    parser.add_argument("--output", default="outputs/videos/out.mp4")
 
-    parser.add_argument(
-        "--csv",
-        default="outputs/events/events.csv",
-    )
+    parser.add_argument("--csv", default="outputs/events/events.csv")
 
     parser.add_argument(
         "--fire-fusion",
         choices=FUSION_MODES,
-        default="and",
+        default=DEMO_OPTIONS["fire_fusion"],
     )
 
     parser.add_argument(
         "--smoke-fusion",
         choices=FUSION_MODES,
-        default="and",
+        default=DEMO_OPTIONS["smoke_fusion"],
     )
 
     parser.add_argument(
         "--motion-dilate",
         type=int,
-        default=5,
+        default=DEMO_OPTIONS["motion_dilate"],
     )
 
     parser.add_argument(
         "--smoke-motion",
         choices=("frame_diff", "mog2"),
-        default="frame_diff",
+        default=DEMO_OPTIONS["smoke_motion"],
     )
 
     parser.add_argument(
         "--smoke-motion-dilate",
         type=int,
-        default=None,
+        default=DEMO_OPTIONS["smoke_motion_dilate"],
     )
 
-    # --------------------------------------------------------
-    # SMOKE Region-Level Fusion
-    # --------------------------------------------------------
+    # Các tham số ghép vùng khói.
 
-    parser.add_argument(
-        "--smoke-region-close",
-        type=int,
-        default=15,
-    )
+    parser.add_argument("--smoke-region-close", type=int, default=15)
 
-    parser.add_argument(
-        "--smoke-region-motion-ratio",
-        type=float,
-        default=0.015,
-    )
+    parser.add_argument("--smoke-region-motion-ratio", type=float, default=0.015)
 
-    parser.add_argument(
-        "--smoke-region-min-motion-pixels",
-        type=int,
-        default=12,
-    )
+    parser.add_argument("--smoke-region-min-motion-pixels", type=int, default=12)
 
-    parser.add_argument(
-        "--smoke-region-min-area",
-        type=int,
-        default=130,
-    )
+    parser.add_argument("--smoke-region-min-area", type=int, default=130)
 
-    # --------------------------------------------------------
-    # SMOKE Temporal Decision
-    # --------------------------------------------------------
+    # Quyết định theo thời gian cho khói.
 
     parser.add_argument(
         "--smoke-temporal-mode",
         choices=("vote", "hybrid"),
-        default="vote",
+        default=DEMO_OPTIONS["smoke_temporal_mode"],
     )
 
-    # --------------------------------------------------------
-    # SMOKE Shape + Edge Verification
-    # --------------------------------------------------------
+    # Bộ lọc hình dạng/cạnh khói.
 
     parser.add_argument(
         "--smoke-verify",
         choices=SMOKE_VERIFY_MODES,
-        default="off",
+        default=DEMO_OPTIONS["smoke_verify"],
         help="Optional SMOKE candidate verification",
     )
 
     parser.add_argument(
         "--smoke-max-aspect-ratio",
         type=float,
-        default=1.10,
+        default=DEMO_OPTIONS["smoke_max_aspect_ratio"],
     )
 
     parser.add_argument(
         "--smoke-max-edge-density",
         type=float,
-        default=0.02,
+        default=DEMO_OPTIONS["smoke_max_edge_density"],
     )
+
+    parser.add_argument(
+        "--single-box-per-kind",
+        action="store_true",
+        default=DEMO_OPTIONS["single_box_per_kind"],
+        help="Draw one enclosing box per kind for confirmed regions",
+    )
+    parser.add_argument(
+        "--multiple-boxes",
+        action="store_false",
+        dest="single_box_per_kind",
+        help="Keep separate confirmed boxes for diagnostics",
+    )
+
+    parser.add_argument(
+        "--smoke-engine", choices=("classical", "opencv_context"), default="classical"
+    )
+    parser.add_argument("--smoke-vote-hits", type=int)
 
     args = parser.parse_args()
 
@@ -594,14 +573,15 @@ if __name__ == "__main__":
         smoke_motion_dilate=args.smoke_motion_dilate,
         smoke_region_close=args.smoke_region_close,
         smoke_region_motion_ratio=args.smoke_region_motion_ratio,
-        smoke_region_min_motion_pixels=(
-            args.smoke_region_min_motion_pixels
-        ),
+        smoke_region_min_motion_pixels=(args.smoke_region_min_motion_pixels),
         smoke_region_min_area=args.smoke_region_min_area,
         smoke_temporal_mode=args.smoke_temporal_mode,
         smoke_verify=args.smoke_verify,
         smoke_max_aspect_ratio=args.smoke_max_aspect_ratio,
         smoke_max_edge_density=args.smoke_max_edge_density,
+        single_box_per_kind=args.single_box_per_kind,
+        smoke_engine=args.smoke_engine,
+        smoke_vote_hits=args.smoke_vote_hits,
     )
 
     print(result)

@@ -1,5 +1,0 @@
-method,morphology,n_regions,total_area,ms_per_frame
-findContours,False,3,30978.0,0.842
-connectedComponents,False,3,29791.0,3.397
-findContours,True,3,30626.5,0.537
-connectedComponents,True,3,31350.0,2.525

@@ -50,10 +50,7 @@ def test_frame_difference_no_motion():
 
 # Test 4: Kiem tra dinh dang mask MOG2
 def test_mog2_mask_format():
-    detector = MOG2MotionDetector(
-        history=200,
-        var_threshold=16
-    )
+    detector = MOG2MotionDetector(history=200, var_threshold=16)
 
     frame = np.zeros((100, 150, 3), dtype=np.uint8)
 

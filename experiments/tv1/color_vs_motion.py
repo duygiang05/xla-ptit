@@ -18,6 +18,7 @@ Dữ liệu: chuỗi TỔNG HỢP 60 frame 640x360, camera cố định, nhiễu
 Kết quả ghi vào experiments/tv1/results/:
   color_vs_motion.csv, color_vs_motion_grid.png
 """
+
 import csv
 import sys
 from pathlib import Path
@@ -40,36 +41,51 @@ OUT = ROOT / "experiments" / "tv1" / "results"
 H, W = 360, 640
 N_FRAMES, WARMUP = 60, 10
 METHODS = ("color_only", "and_diff", "and_diff_dilate15", "and_mog2")
-DISTRACTORS = {"fire": ("traffic_red", "sodium", "red_car"), "smoke": ("concrete", "cloud")}
+DISTRACTORS = {
+    "fire": ("traffic_red", "sodium", "red_car"),
+    "smoke": ("concrete", "cloud"),
+}
 SAMPLE_FRAME = 35
 # Khói nhạt có độ sáng gần bằng trời (khó thấy với ảnh xám); khói đen tương phản cao.
 # Kịch bản: (màu khói, có vân xoáy). "smooth" là đối chứng cho thấy ảnh hưởng của vân.
-SCENARIOS = {"light_smooth": ((175, 173, 170), False), "light_turbulent": ((175, 173, 170), True),
-             "dark_turbulent": ((85, 88, 92), True)}
+SCENARIOS = {
+    "light_smooth": ((175, 173, 170), False),
+    "light_turbulent": ((175, 173, 170), True),
+    "dark_turbulent": ((85, 88, 92), True),
+}
 
 
 def static_background():
     """Nền đứng yên + mask của các vật đứng yên."""
     img = np.zeros((H, W, 3), np.float32)
-    img[:] = (205, 165, 115)                                   # trời
-    img[230:] = (128, 128, 126)                                # tường/nền bê tông
+    img[:] = (205, 165, 115)  # trời
+    img[230:] = (128, 128, 126)  # tường/nền bê tông
     m = {}
-    m["concrete"] = np.zeros((H, W), bool); m["concrete"][230:] = True
+    m["concrete"] = np.zeros((H, W), bool)
+    m["concrete"][230:] = True
     cloud = np.zeros((H, W), np.uint8)
     cv2.ellipse(cloud, (560, 55), (70, 28), 0, 0, 360, 255, -1)
-    img[cloud > 0] = (215, 212, 208); m["cloud"] = cloud > 0
+    img[cloud > 0] = (215, 212, 208)
+    m["cloud"] = cloud > 0
     cv2.rectangle(img, (300, 70), (340, 170), (40, 40, 40), -1)
-    light = np.zeros((H, W), np.uint8); cv2.circle(light, (320, 95), 15, 255, -1)
-    img[light > 0] = (30, 30, 240); m["traffic_red"] = light > 0
-    lamp = np.zeros((H, W), np.uint8); cv2.circle(lamp, (60, 70), 28, 255, -1)
-    img[lamp > 0] = (40, 150, 255); m["sodium"] = lamp > 0
+    light = np.zeros((H, W), np.uint8)
+    cv2.circle(light, (320, 95), 15, 255, -1)
+    img[light > 0] = (30, 30, 240)
+    m["traffic_red"] = light > 0
+    lamp = np.zeros((H, W), np.uint8)
+    cv2.circle(lamp, (60, 70), 28, 255, -1)
+    img[lamp > 0] = (40, 150, 255)
+    m["sodium"] = lamp > 0
     return img, m
 
 
 RISE = 4  # khói bay lên RISE pixel mỗi frame
 # Trường "vân xoáy" mịn (nhiễu đã blur), cao hơn ảnh để có thể trượt lên theo thời gian.
-_TURB = cv2.GaussianBlur(np.random.default_rng(42).random((H + RISE * N_FRAMES, W)).astype(np.float32),
-                         (0, 0), 5)
+_TURB = cv2.GaussianBlur(
+    np.random.default_rng(42).random((H + RISE * N_FRAMES, W)).astype(np.float32),
+    (0, 0),
+    5,
+)
 _TURB = (_TURB - _TURB.mean()) / _TURB.std()  # chuẩn hóa: trung bình 0, độ lệch chuẩn 1
 
 
@@ -82,14 +98,18 @@ def smoke_alpha(t, turbulent=True):
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
     alpha = np.zeros((H, W), np.float32)
     for i in range(10):
-        p = ((t * RISE + i * 22) % 220) / 220                  # vị trí 0 (chân) -> 1 (đỉnh)
+        p = ((t * RISE + i * 22) % 220) / 220  # vị trí 0 (chân) -> 1 (đỉnh)
         cx = 470 + 20 * np.sin(6 * p + 0.3 * i)
         cy = 225 - p * 210
         sigma = 18 + 30 * p
-        alpha += (1 - 0.7 * p) * np.exp(-((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * sigma ** 2))
+        alpha += (1 - 0.7 * p) * np.exp(
+            -((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * sigma**2)
+        )
     if turbulent:
         # Lấy lát cắt dịch dần xuống trong _TURB -> nội dung vân trôi LÊN RISE px mỗi frame
-        alpha *= np.clip(1 + 0.6 * _TURB[t * RISE:t * RISE + H], 0.2, 1.8)  # cuộn đặc/loãng rõ
+        alpha *= np.clip(
+            1 + 0.6 * _TURB[t * RISE : t * RISE + H], 0.2, 1.8
+        )  # cuộn đặc/loãng rõ
     return np.clip(alpha * 0.55, 0, 0.9)
 
 
@@ -99,7 +119,7 @@ def make_frame(t, bg, static, rng, smoke_color=(175, 173, 170), turbulent=True):
 
     # Xe đỏ chạy từ phải sang trái trên nền bê tông, ra khỏi khung từ frame ~50
     car = np.zeros((H, W), np.uint8)
-    x = 360 - 9 * t                                            # x âm: OpenCV tự cắt phần ngoài ảnh
+    x = 360 - 9 * t  # x âm: OpenCV tự cắt phần ngoài ảnh
     cv2.rectangle(car, (x, 290), (x + 90, 325), 255, -1)
     img[car > 0] = (35, 30, 195)
     gt["red_car"] = car > 0
@@ -117,7 +137,7 @@ def make_frame(t, bg, static, rng, smoke_color=(175, 173, 170), turbulent=True):
     img = (1 - a[..., None]) * img + a[..., None] * np.array(smoke_color, np.float32)
     gt["smoke"] = a >= 0.3
     for k in ("concrete", "cloud", "traffic_red", "sodium", "red_car"):
-        gt[k] &= a < 0.1                                       # phần bị khói che không tính là nhiễu
+        gt[k] &= a < 0.1  # phần bị khói che không tính là nhiễu
     for k in ("concrete", "cloud", "traffic_red", "sodium"):
         gt[k] &= ~gt["fire"] & ~gt["red_car"]
 
@@ -134,7 +154,7 @@ def region_stats(mask, kind, gt, cfg):
     hit, false = 0, 0
     for r in extract_regions(mask, kind, cfg):
         x, y, w, h = r.bbox
-        if gt[kind][y:y + h, x:x + w].mean() >= 0.3:
+        if gt[kind][y : y + h, x : x + w].mean() >= 0.3:
             hit = 1
         else:
             false += 1
@@ -146,8 +166,16 @@ def run_scenario(scenario, smoke_color, turbulent, cfg):
     bg, static = static_background()
     diff_det, mog2_det = MotionDetector(cfg), MOG2MotionDetector()
 
-    acc = {(k, m): {"recall": [], "hit": [], "false_regions": [], **{d: [] for d in DISTRACTORS[k]}}
-           for k in ("fire", "smoke") for m in METHODS}
+    acc = {
+        (k, m): {
+            "recall": [],
+            "hit": [],
+            "false_regions": [],
+            **{d: [] for d in DISTRACTORS[k]},
+        }
+        for k in ("fire", "smoke")
+        for m in METHODS
+    }
     sample = None
     for t in range(N_FRAMES):
         frame, gt = make_frame(t, bg, static, rng, smoke_color, turbulent)
@@ -158,7 +186,9 @@ def run_scenario(scenario, smoke_color, turbulent, cfg):
             c = colors[kind]
             masks[(kind, "color_only")] = combine_masks(c, motion["diff"], "color")
             masks[(kind, "and_diff")] = combine_masks(c, motion["diff"], "and")
-            masks[(kind, "and_diff_dilate15")] = combine_masks(c, motion["diff"], "and", motion_dilate=15)
+            masks[(kind, "and_diff_dilate15")] = combine_masks(
+                c, motion["diff"], "and", motion_dilate=15
+            )
             masks[(kind, "and_mog2")] = combine_masks(c, motion["mog2"], "and")
         if t == SAMPLE_FRAME:
             sample = (frame, motion, masks)
@@ -166,7 +196,9 @@ def run_scenario(scenario, smoke_color, turbulent, cfg):
             continue
         for (kind, method), mk in masks.items():
             on, a = mk > 0, acc[(kind, method)]
-            a["recall"].append(np.count_nonzero(on & gt[kind]) / max(1, np.count_nonzero(gt[kind])))
+            a["recall"].append(
+                np.count_nonzero(on & gt[kind]) / max(1, np.count_nonzero(gt[kind]))
+            )
             for d in DISTRACTORS[kind]:
                 if gt[d].any():
                     a[d].append(np.count_nonzero(on & gt[d]) / np.count_nonzero(gt[d]))
@@ -176,10 +208,14 @@ def run_scenario(scenario, smoke_color, turbulent, cfg):
 
     rows = []
     for (kind, method), a in acc.items():
-        row = {"scenario": scenario, "kind": kind, "method": method,
-               "pixel_recall": np.mean(a["recall"]),
-               "frames_found": np.mean(a["hit"]),
-               "false_regions_per_frame": np.mean(a["false_regions"])}
+        row = {
+            "scenario": scenario,
+            "kind": kind,
+            "method": method,
+            "pixel_recall": np.mean(a["recall"]),
+            "frames_found": np.mean(a["hit"]),
+            "false_regions_per_frame": np.mean(a["false_regions"]),
+        }
         for d in ("traffic_red", "sodium", "red_car", "concrete", "cloud"):
             row[f"fp_{d}"] = np.mean(a[d]) if d in a and a[d] else ""
         rows.append(row)
@@ -198,26 +234,49 @@ def main():
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: round(v, 4) if isinstance(v, float) else v for k, v in r.items()})
+            writer.writerow(
+                {k: round(v, 4) if isinstance(v, float) else v for k, v in r.items()}
+            )
 
     frame, motion, masks = samples["light_turbulent"]
     dframe, dmotion, dmasks = samples["dark_turbulent"]
-    top = [label(frame, f"input t={SAMPLE_FRAME}"), label(motion["diff"], "TV2 frame diff"),
-           label(motion["mog2"], "TV2 MOG2"), np.zeros_like(frame)]
+    top = [
+        label(frame, f"input t={SAMPLE_FRAME}"),
+        label(motion["diff"], "TV2 frame diff"),
+        label(motion["mog2"], "TV2 MOG2"),
+        np.zeros_like(frame),
+    ]
     fire_row = [label(masks[("fire", m)], f"fire | {m}") for m in METHODS]
     smoke_row = [label(masks[("smoke", m)], f"smoke | {m}") for m in METHODS]
-    dark_top = [label(dframe, "dark smoke input"), label(dmotion["diff"], "frame diff (dark smoke)"),
-                label(dmotion["mog2"], "MOG2 (dark smoke)"), np.zeros_like(frame)]
+    dark_top = [
+        label(dframe, "dark smoke input"),
+        label(dmotion["diff"], "frame diff (dark smoke)"),
+        label(dmotion["mog2"], "MOG2 (dark smoke)"),
+        np.zeros_like(frame),
+    ]
     dark_row = [label(dmasks[("smoke", m)], f"dark smoke | {m}") for m in METHODS]
-    grid = np.vstack([np.hstack(top), np.hstack(fire_row), np.hstack(smoke_row),
-                      np.hstack(dark_top), np.hstack(dark_row)])
-    imwrite_unicode(OUT / "color_vs_motion_grid.png",
-                    cv2.resize(grid, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA))
+    grid = np.vstack(
+        [
+            np.hstack(top),
+            np.hstack(fire_row),
+            np.hstack(smoke_row),
+            np.hstack(dark_top),
+            np.hstack(dark_row),
+        ]
+    )
+    imwrite_unicode(
+        OUT / "color_vs_motion_grid.png",
+        cv2.resize(grid, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA),
+    )
 
     cols = list(rows[0])
     print(" | ".join(c.replace("fp_", "") for c in cols))
     for r in rows:
-        print(" | ".join(f"{r[c]:.2f}" if isinstance(r[c], float) else str(r[c]) for c in cols))
+        print(
+            " | ".join(
+                f"{r[c]:.2f}" if isinstance(r[c], float) else str(r[c]) for c in cols
+            )
+        )
     print(f"\nĐã lưu kết quả vào {OUT}")
 
 

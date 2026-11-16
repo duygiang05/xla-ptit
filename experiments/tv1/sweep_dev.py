@@ -19,6 +19,7 @@ nhỏ nhất (hòa thì cover_neg nhỏ nhất). Cấu hình CUỐI còn đượ
 Kết quả (experiments/tv1/results/sweep/): blur_ablation.csv, fire_sweep.csv, smoke_sweep.csv,
   fire_core_sweep.csv, final_vs_baseline.csv
 """
+
 import csv
 import itertools
 import os
@@ -40,12 +41,23 @@ OUT = ROOT / "experiments" / "tv1" / "results" / "sweep"
 SAMPLES = 20  # frame rải đều mỗi video
 # Mặc định TRƯỚC khi chỉnh (các trường còn lại lấy từ Config() hiện tại).
 BASELINE = dict(smoke_s_max=70, smoke_texture_max=0.0, fire_core_v_min=0)
-CORE_GRID = {"fire_core_v_min": (200, 220, 240), "fire_core_s_max": (60, 100), "fire_core_dilate": (7, 15)}
+CORE_GRID = {
+    "fire_core_v_min": (200, 220, 240),
+    "fire_core_s_max": (60, 100),
+    "fire_core_dilate": (7, 15),
+}
 
-FIRE_GRID = {"fire_s_min": (60, 80, 100, 130), "fire_v_min": (100, 125, 150, 180),
-             "fire_h_high": (25, 35), "fire_color_mode": ("hsv", "and")}
-SMOKE_GRID = {"smoke_s_max": (20, 30, 40, 55, 70), "smoke_v_min": (65, 100, 130),
-              "smoke_texture_max": (0.0, 8.0, 12.0)}
+FIRE_GRID = {
+    "fire_s_min": (60, 80, 100, 130),
+    "fire_v_min": (100, 125, 150, 180),
+    "fire_h_high": (25, 35),
+    "fire_color_mode": ("hsv", "and"),
+}
+SMOKE_GRID = {
+    "smoke_s_max": (20, 30, 40, 55, 70),
+    "smoke_v_min": (65, 100, 130),
+    "smoke_texture_max": (0.0, 8.0, 12.0),
+}
 
 
 def load_dev_frames(cfg):
@@ -58,7 +70,7 @@ def load_dev_frames(cfg):
         n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         want = {int((k + 0.5) * n / SAMPLES) for k in range(SAMPLES)}
         i, frames = 0, []
-        while len(frames) < len(want):          # đọc tuần tự, an toàn với .avi cũ
+        while len(frames) < len(want):  # đọc tuần tự, an toàn với .avi cũ
             ok, fr = cap.read()
             if not ok:
                 break
@@ -66,8 +78,14 @@ def load_dev_frames(cfg):
                 frames.append(resize_keep_aspect(fr, cfg.width, cfg.height))
             i += 1
         cap.release()
-        data.append({"id": r["video_id"], "fire": int(r["has_fire"]), "smoke": int(r["has_smoke"]),
-                     "frames": frames})
+        data.append(
+            {
+                "id": r["video_id"],
+                "fire": int(r["has_fire"]),
+                "smoke": int(r["has_smoke"]),
+                "frames": frames,
+            }
+        )
     return data
 
 
@@ -88,9 +106,13 @@ def evaluate(data, cfg, kind):
             cover[v[kind]].append(np.count_nonzero(m) / m.size)
             n, _, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
             speck.append(int(np.sum(st[1:, cv2.CC_STAT_AREA] <= 10)))
-    return {"recall": float(np.mean(hit[1])), "fpr": float(np.mean(hit[0])),
-            "cover_pos": float(np.mean(cover[1])), "cover_neg": float(np.mean(cover[0])),
-            "speckles_per_frame": float(np.mean(speck))}
+    return {
+        "recall": float(np.mean(hit[1])),
+        "fpr": float(np.mean(hit[0])),
+        "cover_pos": float(np.mean(cover[1])),
+        "cover_neg": float(np.mean(cover[0])),
+        "speckles_per_frame": float(np.mean(speck)),
+    }
 
 
 def sweep(data, base, grid, kind):
@@ -114,56 +136,82 @@ def write(name, rows):
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         for r in rows:
-            w.writerow({k: round(v, 4) if isinstance(v, float) else v for k, v in r.items()})
+            w.writerow(
+                {k: round(v, 4) if isinstance(v, float) else v for k, v in r.items()}
+            )
 
 
 def show(title, r, keys):
     cfg_txt = ", ".join(f"{k}={r[k]}" for k in keys)
-    print(f"  {title:9s} recall {r['recall']:.2f} | fpr {r['fpr']:.2f} | phủ có {r['cover_pos']:.1%} "
-          f"| phủ không {r['cover_neg']:.1%} | {cfg_txt}")
+    print(
+        f"  {title:9s} recall {r['recall']:.2f} | fpr {r['fpr']:.2f} | phủ có {r['cover_pos']:.1%} "
+        f"| phủ không {r['cover_neg']:.1%} | {cfg_txt}"
+    )
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    final = Config()                      # mặc định hiện tại (sau khi chỉnh)
-    base = replace(final, **BASELINE)     # mốc trước khi chỉnh
+    final = Config()  # mặc định hiện tại (sau khi chỉnh)
+    base = replace(final, **BASELINE)  # mốc trước khi chỉnh
     data = load_dev_frames(base)
     n_pos_f = sum(v["fire"] for v in data)
     n_pos_s = sum(v["smoke"] for v in data)
-    print(f"{len(data)} video development, {sum(len(v['frames']) for v in data)} frame "
-          f"(có lửa: {n_pos_f} video, có khói: {n_pos_s} video)\n")
+    print(
+        f"{len(data)} video development, {sum(len(v['frames']) for v in data)} frame "
+        f"(có lửa: {n_pos_f} video, có khói: {n_pos_s} video)\n"
+    )
 
     blur_rows = []
     for k in (1, 5, 9):
         for kind in ("fire", "smoke"):
-            blur_rows.append({"kind": kind, "blur_kernel": k, **evaluate(data, replace(base, blur_kernel=k), kind)})
+            blur_rows.append(
+                {
+                    "kind": kind,
+                    "blur_kernel": k,
+                    **evaluate(data, replace(base, blur_kernel=k), kind),
+                }
+            )
     write("blur_ablation.csv", blur_rows)
     print("Blur (cấu hình mặc định):")
     for r in blur_rows:
-        print(f"  {r['kind']:5s} blur={r['blur_kernel']}: recall {r['recall']:.2f} fpr {r['fpr']:.2f} "
-              f"đốm nhiễu/frame {r['speckles_per_frame']:.0f}")
+        print(
+            f"  {r['kind']:5s} blur={r['blur_kernel']}: recall {r['recall']:.2f} fpr {r['fpr']:.2f} "
+            f"đốm nhiễu/frame {r['speckles_per_frame']:.0f}"
+        )
 
-    for kind, grid, fname in (("fire", FIRE_GRID, "fire_sweep.csv"), ("smoke", SMOKE_GRID, "smoke_sweep.csv")):
+    for kind, grid, fname in (
+        ("fire", FIRE_GRID, "fire_sweep.csv"),
+        ("smoke", SMOKE_GRID, "smoke_sweep.csv"),
+    ):
         rows, ref, best = sweep(data, base, grid, kind)
         write(fname, rows)
         print(f"\n{kind.upper()} – {len(rows)} cấu hình:")
         show("mốc", ref, list(grid))
         show("tốt nhất", best, list(grid))
 
-    core_rows = [{**p, **evaluate(data, replace(base, **p), "fire")}
-                 for p in (dict(zip(CORE_GRID, v)) for v in itertools.product(*CORE_GRID.values()))]
+    core_rows = [
+        {**p, **evaluate(data, replace(base, **p), "fire")}
+        for p in (
+            dict(zip(CORE_GRID, v)) for v in itertools.product(*CORE_GRID.values())
+        )
+    ]
     write("fire_core_sweep.csv", core_rows)
     print("\nLõi lửa (luật màu lửa giữ nguyên mốc):")
     for r in core_rows:
         show("", r, list(CORE_GRID))
 
-    final_rows = [{"kind": k, "config": name, **evaluate(data, c, k)}
-                  for k in ("fire", "smoke") for name, c in (("baseline", base), ("final", final))]
+    final_rows = [
+        {"kind": k, "config": name, **evaluate(data, c, k)}
+        for k in ("fire", "smoke")
+        for name, c in (("baseline", base), ("final", final))
+    ]
     write("final_vs_baseline.csv", final_rows)
     print("\nMốc trước khi chỉnh vs cấu hình cuối (Config() hiện tại):")
     for r in final_rows:
-        print(f"  {r['kind']:5s} {r['config']:8s} recall {r['recall']:.2f} | fpr {r['fpr']:.2f} | "
-              f"phủ có {r['cover_pos']:.1%} | phủ không {r['cover_neg']:.1%}")
+        print(
+            f"  {r['kind']:5s} {r['config']:8s} recall {r['recall']:.2f} | fpr {r['fpr']:.2f} | "
+            f"phủ có {r['cover_pos']:.1%} | phủ không {r['cover_neg']:.1%}"
+        )
     print(f"\nĐã lưu vào {OUT}")
 
 

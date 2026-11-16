@@ -4,6 +4,7 @@ Khói xám nhạt, bán trong suốt -> màu trùng tường, bê tông, mây, s
 Mask này CHỈ LÀ GỢI Ý, không phải điều kiện đủ: chuyển động (TV2: khói bay lên/lan ra)
 và thời gian (TV4: tồn tại lâu, biến đổi chậm) mới là bằng chứng chính.
 """
+
 import cv2
 import numpy as np
 
@@ -32,7 +33,11 @@ def smoke_mask_rgb(frame_bgr: np.ndarray, cfg: Config) -> np.ndarray:
     """
     mx = frame_bgr.max(axis=2).astype(np.int16)
     mn = frame_bgr.min(axis=2).astype(np.int16)
-    ok = ((mx - mn) <= cfg.smoke_rgb_spread_max) & (mx >= cfg.smoke_v_min) & (mx <= cfg.smoke_v_max)
+    ok = (
+        ((mx - mn) <= cfg.smoke_rgb_spread_max)
+        & (mx >= cfg.smoke_v_min)
+        & (mx <= cfg.smoke_v_max)
+    )
     return ok.astype(np.uint8) * 255
 
 
@@ -52,10 +57,14 @@ def local_std(gray: np.ndarray, win: int) -> np.ndarray:
 def smoke_texture_mask(frame_bgr: np.ndarray, cfg: Config) -> np.ndarray:
     """255 ở vùng đủ mịn (std cục bộ <= smoke_texture_max). Loại bề mặt xám có vân."""
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-    return (local_std(gray, cfg.smoke_texture_win) <= cfg.smoke_texture_max).astype(np.uint8) * 255
+    return (local_std(gray, cfg.smoke_texture_win) <= cfg.smoke_texture_max).astype(
+        np.uint8
+    ) * 255
 
 
-def smoke_candidates(hsv: np.ndarray, cfg: Config, frame_bgr: np.ndarray | None = None) -> np.ndarray:
+def smoke_candidates(
+    hsv: np.ndarray, cfg: Config, frame_bgr: np.ndarray | None = None
+) -> np.ndarray:
     """Kết hợp luật màu theo cfg.smoke_color_mode, rồi (nếu bật) lọc độ mịn.
 
     frame_bgr (ảnh BGR đã blur) cần cho luật RGB và lọc độ mịn; nếu không truyền

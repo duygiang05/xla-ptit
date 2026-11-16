@@ -4,6 +4,7 @@ Ghép tham lam theo IoU bbox, nếu không đủ IoU thì theo khoảng cách t�
 chỉ ghép vùng cùng `kind`. Mỗi track giữ lịch sử Region trong cửa sổ ngắn để
 TV4 tính biến thiên diện tích/chu vi/tâm/hình dạng theo thời gian.
 """
+
 from collections import deque
 from dataclasses import dataclass, field
 import math
@@ -12,10 +13,13 @@ import numpy as np
 
 
 def bbox_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
-    """Helper for basic association; NOT a full multi-object tracker."""
+    """Tính IoU của hai hộp để ghép vùng qua frame."""
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
-    x1 = max(ax, bx); y1 = max(ay, by); x2 = min(ax + aw, bx + bw); y2 = min(ay + ah, by + bh)
+    x1 = max(ax, bx)
+    y1 = max(ay, by)
+    x2 = min(ax + aw, bx + bw)
+    y2 = min(ay + ah, by + bh)
     intersection = max(0, x2 - x1) * max(0, y2 - y1)
     union = aw * ah + bw * bh - intersection
     return intersection / float(union) if union > 0 else 0.0
@@ -64,11 +68,25 @@ class Track:
             "length": float(len(regions)),
             "area_mean": float(areas.mean()) if areas.size else 0.0,
             "area_cv": cv(areas),
-            "area_growth": float((areas[-1] - areas[0]) / areas[0]) if areas.size and areas[0] > 0 else 0.0,
+            "area_growth": (
+                float((areas[-1] - areas[0]) / areas[0])
+                if areas.size and areas[0] > 0
+                else 0.0
+            ),
             "perimeter_cv": cv(perims),
             "circularity_std": float(circ.std()) if circ.size else 0.0,
-            "centroid_shift": float(np.mean([center_distance(a.centroid, b.centroid) for a, b in steps])) if steps else 0.0,
-            "bbox_iou_mean": float(np.mean([bbox_iou(a.bbox, b.bbox) for a, b in steps])) if steps else 1.0,
+            "centroid_shift": (
+                float(
+                    np.mean([center_distance(a.centroid, b.centroid) for a, b in steps])
+                )
+                if steps
+                else 0.0
+            ),
+            "bbox_iou_mean": (
+                float(np.mean([bbox_iou(a.bbox, b.bbox) for a, b in steps]))
+                if steps
+                else 1.0
+            ),
         }
 
 
@@ -80,12 +98,23 @@ class RegionTracker:
     max_missed: số frame liên tiếp được phép mất dấu trước khi xóa track.
     """
 
-    def __init__(self, cfg=None, min_iou: float | None = None, max_center_distance: float | None = None,
-                 history: int | None = None, max_missed: int = 2):
+    def __init__(
+        self,
+        cfg=None,
+        min_iou: float | None = None,
+        max_center_distance: float | None = None,
+        history: int | None = None,
+        max_missed: int = 2,
+    ):
         self.min_iou = min_iou if min_iou is not None else getattr(cfg, "min_iou", 0.1)
-        self.max_center_distance = (max_center_distance if max_center_distance is not None
-                                    else getattr(cfg, "max_center_distance", 55.0))
-        self.history = history if history is not None else getattr(cfg, "vote_window", 7)
+        self.max_center_distance = (
+            max_center_distance
+            if max_center_distance is not None
+            else getattr(cfg, "max_center_distance", 55.0)
+        )
+        self.history = (
+            history if history is not None else getattr(cfg, "vote_window", 7)
+        )
         self.max_missed = max_missed
         self.tracks: list[Track] = []
         self._next_id = 1

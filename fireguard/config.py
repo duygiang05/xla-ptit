@@ -1,13 +1,16 @@
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class Config:
-    # Placeholder defaults: tune on development videos, not on held-out test.
+    # Chỉ chỉnh tham số trên video development; không dùng tập test để dò ngưỡng.
     width: int = 640
     height: int = 360
     blur_kernel: int = 5
     fire_h_low: int = 0
-    fire_h_high: int = 35  # TV1: 25 -> 35 để không bỏ sót lõi lửa vàng (vàng thuần = 30)
+    fire_h_high: int = (
+        35  # TV1: 25 -> 35 để không bỏ sót lõi lửa vàng (vàng thuần = 30)
+    )
     fire_s_min: int = 100
     fire_v_min: int = 125
     # TV1 – hue đỏ "quấn vòng" ở cuối thang 0–179: lấy thêm [fire_h_wrap_low, 179].
@@ -20,12 +23,14 @@ class Config:
     fire_color_mode: str = "hsv"
     # TV1 – "lõi sáng" của ngọn lửa (vàng-trắng, S thấp) bị luật màu bỏ sót -> mask thủng lỗ.
     #   Pixel V >= fire_core_v_min và S <= fire_core_s_max được thêm vào mask lửa NẾU nằm trong
-    #   fire_core_dilate pixel quanh vùng lửa đã tìm được (để không bắt đèn trắng/mặt trời đứng riêng).
+    #   fire_core_dilate pixel quanh vùng lửa đã tìm được
+    #   (để không bắt đèn trắng/mặt trời đứng riêng).
     #   fire_core_v_min = 0 để TẮT.
     fire_core_v_min: int = 240  # bật sau quét ngưỡng development (NOTES_sweep_dev.md)
     fire_core_s_max: int = 100
     fire_core_dilate: int = 7
-    # TV1: 70 -> 30 sau quét ngưỡng trên data/development (experiments/tv1/results/NOTES_sweep_dev.md):
+    # TV1: 70 -> 30 sau quét ngưỡng trên development;
+    # xem experiments/tv1/results/NOTES_sweep_dev.md.
     #   trời nhạt, tường, sỏi thật có S ~ 30–70 nên S<=70 bật ~43% khung hình ở video âm tính.
     #   Tăng lại (vd 50) nếu bỏ sót khói mỏng mang màu nền; giảm nếu bắt nhầm nhiều vật nhạt màu.
     smoke_s_max: int = 30

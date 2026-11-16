@@ -38,72 +38,45 @@ while True:
     previous = gray.copy()
 
     for t in THRESHOLDS:
-        _, mask = cv2.threshold(
-            diff, t, 255, cv2.THRESH_BINARY
-        )
+        _, mask = cv2.threshold(diff, t, 255, cv2.THRESH_BINARY)
 
-        ratios[t].append(
-            np.count_nonzero(mask) / mask.size
-        )
+        ratios[t].append(np.count_nonzero(mask) / mask.size)
 
         if frame_count == TARGET_FRAME:
-            path = OUTPUT_DIR / (
-                f"vd_khoi_T{t}_frame_{frame_count:04d}_diff.png"
-            )
+            path = OUTPUT_DIR / (f"vd_khoi_T{t}_frame_{frame_count:04d}_diff.png")
             cv2.imwrite(str(path), mask)
 
     if frame_count == TARGET_FRAME:
-        cv2.imwrite(
-            str(OUTPUT_DIR / "vd_khoi_frame_0149_original.png"),
-            frame
-        )
+        cv2.imwrite(str(OUTPUT_DIR / "vd_khoi_frame_0149_original.png"), frame)
         print("Da luu ket qua frame 149")
 
 cap.release()
 
 print("\n===== SO SANH THRESHOLD =====")
 for t in THRESHOLDS:
-    print(
-        f"T={t}: "
-        f"{np.mean(ratios[t]):.4%} pixel trang TB"
-    )
+    print(f"T={t}: " f"{np.mean(ratios[t]):.4%} pixel trang TB")
 
-
-# ==============================
-# XUAT THONG KE THRESHOLD RA CSV
-# ==============================
+# Xuất thống kê ngưỡng ra CSV.
 
 csv_path = OUTPUT_DIR / "threshold_statistics.csv"
 
 if frame_count > 0:
-    with open(
-        csv_path,
-        "w",
-        newline="",
-        encoding="utf-8-sig"
-    ) as file:
+    with open(csv_path, "w", newline="", encoding="utf-8-sig") as file:
 
         writer = csv.writer(file)
 
-        writer.writerow([
-            "Video",
-            "Threshold",
-            "Total Frames",
-            "White Pixel Ratio (%)"
-        ])
+        writer.writerow(["Video", "Threshold", "Total Frames", "White Pixel Ratio (%)"])
 
         for t in THRESHOLDS:
-            writer.writerow([
-                Path(VIDEO_PATH).name,
-                t,
-                frame_count,
-                round(
-                    float(np.mean(ratios[t])) * 100,
-                    4
-                )
-            ])
+            writer.writerow(
+                [
+                    Path(VIDEO_PATH).name,
+                    t,
+                    frame_count,
+                    round(float(np.mean(ratios[t])) * 100, 4),
+                ]
+            )
 
     print(f"Da luu thong ke: {csv_path}")
-
 
 print("Hoan thanh!")

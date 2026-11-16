@@ -13,6 +13,7 @@ Lửa: chạy ở blur 5 (mặc định). Khói: chạy có và không lọc đ�
 Không dùng data/test.
 Kết quả: experiments/tv1/results/sweep/modes_real.csv
 """
+
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -28,7 +29,9 @@ MODES = ("hsv", "rgb", "and", "or")
 
 
 def main():
-    sys.stdout.reconfigure(encoding="utf-8")  # console Windows (cp1252) không in được tiếng Việt
+    sys.stdout.reconfigure(
+        encoding="utf-8"
+    )  # console Windows (cp1252) không in được tiếng Việt
     OUT.mkdir(parents=True, exist_ok=True)
     cfg = Config()
     data = load_dev_frames(cfg)
@@ -36,18 +39,38 @@ def main():
 
     rows = []
     for mode in MODES:
-        rows.append({"kind": "fire", "mode": mode, "texture": "-",
-                     **evaluate(data, replace(cfg, fire_color_mode=mode), "fire")})
+        rows.append(
+            {
+                "kind": "fire",
+                "mode": mode,
+                "texture": "-",
+                **evaluate(data, replace(cfg, fire_color_mode=mode), "fire"),
+            }
+        )
     for tex in (0.0, cfg.smoke_texture_max):
         for mode in MODES:
-            rows.append({"kind": "smoke", "mode": mode, "texture": tex,
-                         **evaluate(data, replace(cfg, smoke_color_mode=mode, smoke_texture_max=tex), "smoke")})
+            rows.append(
+                {
+                    "kind": "smoke",
+                    "mode": mode,
+                    "texture": tex,
+                    **evaluate(
+                        data,
+                        replace(cfg, smoke_color_mode=mode, smoke_texture_max=tex),
+                        "smoke",
+                    ),
+                }
+            )
     write("modes_real.csv", rows)
 
-    print(f"{'kind':5s} {'mode':4s} {'tex':>5s} | recall |  fpr | phủ có | phủ không | đốm/frame")
+    print(
+        f"{'kind':5s} {'mode':4s} {'tex':>5s} | recall |  fpr | phủ có | phủ không | đốm/frame"
+    )
     for r in rows:
-        print(f"{r['kind']:5s} {r['mode']:4s} {str(r['texture']):>5s} | {r['recall']:6.2f} | {r['fpr']:.2f} | "
-              f"{r['cover_pos']:6.1%} | {r['cover_neg']:9.1%} | {r['speckles_per_frame']:.1f}")
+        print(
+            f"{r['kind']:5s} {r['mode']:4s} {str(r['texture']):>5s} | {r['recall']:6.2f} | {r['fpr']:.2f} | "
+            f"{r['cover_pos']:6.1%} | {r['cover_neg']:9.1%} | {r['speckles_per_frame']:.1f}"
+        )
     print(f"\nĐã lưu vào {OUT / 'modes_real.csv'}")
 
 

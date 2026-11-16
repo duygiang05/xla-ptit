@@ -5,6 +5,7 @@ Thứ tự xử lý mặc định:  frame BGR  ->  GaussianBlur  ->  HSV
   `color_candidates` KHÔNG tự resize vì pipeline đã resize và mask phải cùng kích thước frame.
 - Lưu ý OpenCV: thứ tự kênh là BGR; Hue trong HSV là 0–179 (không phải 0–360).
 """
+
 import cv2
 import numpy as np
 
@@ -21,7 +22,9 @@ def check_frame(frame_bgr: np.ndarray) -> None:
         raise ValueError(f"frame_bgr phải là uint8, nhận {frame_bgr.dtype}")
 
 
-def resize_keep_aspect(frame_bgr: np.ndarray, max_width: int, max_height: int) -> np.ndarray:
+def resize_keep_aspect(
+    frame_bgr: np.ndarray, max_width: int, max_height: int
+) -> np.ndarray:
     """Thu nhỏ frame để vừa khung max_width×max_height mà KHÔNG méo hình.
 
     - Chỉ thu nhỏ, không phóng to (phóng to không thêm thông tin, chỉ tốn thời gian).

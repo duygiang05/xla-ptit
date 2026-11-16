@@ -1,16 +1,4 @@
-
-"""FireGuard - Streamlit demonstration application.
-
-Uses the integrated OpenCV pipeline without modifying
-the detection algorithms.
-
-FIRE:
-    Frame Difference + AND Dilation 5 + Temporal Vote
-
-SMOKE:
-    MOG2 + Region Motion Fusion
-    + Shape/Edge Verification + Temporal Vote
-"""
+"""Giao diện Streamlit cho pipeline phát hiện lửa và khói bằng OpenCV."""
 
 import csv
 import hashlib
@@ -23,22 +11,13 @@ import shutil
 import streamlit as st
 
 from fireguard.pipeline import run_video
-
-
-# ============================================================
-# Page configuration
-# ============================================================
+from fireguard.presets import DEMO_OPTIONS, OPENCV_CONTEXT_OPTIONS
 
 st.set_page_config(
     page_title="FireGuard | Fire & Smoke Detection",
     page_icon="🔥",
     layout="wide",
 )
-
-
-# ============================================================
-# Styling
-# ============================================================
 
 st.markdown(
     """
@@ -69,46 +48,31 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# ============================================================
-# Application header
-# ============================================================
-
 st.title("🔥 FireGuard")
 
-st.markdown(
-    "**Hệ thống phát hiện vùng nghi lửa và khói trong video "
-    "bằng các kỹ thuật xử lý ảnh OpenCV.**"
-)
-
-st.caption(
-    "Bài tập lớn Xử lý ảnh | Color Detection • Motion Detection "
-    "• Fusion • Morphology • Temporal Filtering"
-)
+st.caption("Phát hiện vùng nghi lửa và khói trong video bằng OpenCV.")
 
 st.divider()
 
-
-# ============================================================
-# Pipeline configuration
-# ============================================================
-
-PIPELINE_OPTIONS = {
-    "fire_fusion": "and_dilate",
-    "smoke_fusion": "region_motion",
-    "motion_dilate": 5,
-    "smoke_motion": "mog2",
-    "smoke_motion_dilate": 9,
-    "smoke_temporal_mode": "vote",
-    "smoke_verify": "shape_edge",
-    "smoke_max_aspect_ratio": 1.10,
-    "smoke_max_edge_density": 0.02,
-}
+PIPELINE_OPTIONS = {**DEMO_OPTIONS, **OPENCV_CONTEXT_OPTIONS}
 
 
-# ============================================================
-# Session state
-# ============================================================
+def find_usable_ffmpeg():
+    """Tìm FFmpeg chạy được để xuất MP4 tương thích trình duyệt."""
+    executable = shutil.which("ffmpeg")
+    if executable is None:
+        return None
+    try:
+        probe = subprocess.run(
+            [executable, "-version"],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return executable if probe.returncode == 0 else None
+
 
 if "fireguard_result" not in st.session_state:
     st.session_state.fireguard_result = None
@@ -117,16 +81,11 @@ if "fireguard_input_id" not in st.session_state:
     st.session_state.fireguard_input_id = None
 
 
-# ============================================================
-# Helper: CSV statistics
-# ============================================================
-
 def analyze_csv(csv_bytes: bytes, total_frames: int):
+    """Đếm số hộp và số frame có phát hiện theo từng loại."""
     text = csv_bytes.decode("utf-8-sig")
 
-    reader = csv.DictReader(
-        io.StringIO(text)
-    )
+    reader = csv.DictReader(io.StringIO(text))
 
     fire_boxes = 0
     smoke_boxes = 0
@@ -155,10 +114,6 @@ def analyze_csv(csv_bytes: bytes, total_frames: int):
     }
 
 
-# ============================================================
-# Video upload
-# ============================================================
-
 st.subheader("1. Tải video đầu vào")
 
 uploaded = st.file_uploader(
@@ -171,129 +126,71 @@ if uploaded is not None:
 
     video_bytes = uploaded.getvalue()
 
-    input_id = hashlib.sha256(
-        video_bytes
-    ).hexdigest()
+    input_id = hashlib.sha256(video_bytes).hexdigest()
 
-    # Remove old results if a different video is uploaded.
+    st.video(video_bytes)
+
+    st.subheader("2. Phân tích video")
+
     if st.session_state.fireguard_input_id != input_id:
         st.session_state.fireguard_result = None
         st.session_state.fireguard_input_id = input_id
 
-    st.success(
-        f"Đã tải lên: {uploaded.name}"
-    )
-
-    st.video(video_bytes)
-
-    # ========================================================
-    # Analysis settings
-    # ========================================================
-
-    st.subheader("2. Cấu hình xử lý")
-
-    with st.expander(
-        "Xem cấu hình thuật toán",
-        expanded=False,
-    ):
+    with st.expander("Xem cấu hình thuật toán", expanded=False):
 
         col_a, col_b = st.columns(2)
 
         with col_a:
             st.markdown("**FIRE Detection**")
 
-            st.write(
-                "Color: HSV + Fire Core"
-            )
+            st.write("Color: HSV + Fire Core")
 
-            st.write(
-                "Motion: Frame Difference"
-            )
+            st.write("Motion: Frame Difference")
 
-            st.write(
-                "Fusion: AND + Dilation 5×5"
-            )
+            st.write("Fusion: AND + Dilation 5×5")
 
-            st.write(
-                "Temporal: Voting"
-            )
+            st.write("Temporal: Voting")
 
         with col_b:
             st.markdown("**SMOKE Detection**")
+            st.write("TV1: màu/độ mịn theo bối cảnh trời hoặc nền")
+            st.write("TV2: MOG2; Fusion: vùng chuyển động hoặc màu")
+            st.write("TV3: morphology + kiểm tra vùng")
+            st.write("TV4: bỏ phiếu 5/7 frame")
 
-            st.write(
-                "Color: HSV + Texture"
-            )
-
-            st.write(
-                "Motion: MOG2"
-            )
-
-            st.write(
-                "Fusion: Region-Level Motion"
-            )
-
-            st.write(
-                "Verification: Shape + Edge"
-            )
-
-            st.write(
-                "Temporal: Voting"
-            )
-
-    st.info(
-        "FireGuard xử lý cả FIRE và SMOKE trong cùng một video. "
-        "Các vùng phát hiện là kết quả thuật toán, "
-        "không phải xác suất dự đoán đã hiệu chuẩn."
-    )
-
-    # ========================================================
-    # Run analysis
-    # ========================================================
+    ffmpeg_exe = find_usable_ffmpeg()
+    if ffmpeg_exe is None:
+        st.warning("Cần cài FFmpeg và thêm vào PATH để xuất video kết quả H.264.")
 
     if st.button(
         "▶ Bắt đầu phân tích video",
         type="primary",
         use_container_width=True,
+        disabled=ffmpeg_exe is None,
     ):
 
-        # Clear old output before starting new analysis.
+        # Xóa kết quả cũ trước khi xử lý video mới.
         st.session_state.fireguard_result = None
 
         try:
 
-            with st.spinner(
-                "Đang xử lý video bằng FireGuard..."
-            ):
+            with st.spinner("Đang xử lý video bằng FireGuard..."):
 
-                # All temporary files remain available until
-                # their contents are read into session state.
+                # Đọc hết kết quả trước khi thư mục tạm được giải phóng.
                 with tempfile.TemporaryDirectory() as temp_dir:
 
                     workdir = Path(temp_dir)
 
-                    suffix = (
-                        Path(uploaded.name).suffix.lower()
-                        or ".mp4"
-                    )
+                    suffix = Path(uploaded.name).suffix.lower() or ".mp4"
 
-                    input_path = (
-                        workdir / f"input{suffix}"
-                    )
+                    input_path = workdir / f"input{suffix}"
 
-                    output_path = (
-                        workdir / "fireguard_result.mp4"
-                    )
+                    output_path = workdir / "fireguard_result.mp4"
 
-                    csv_path = (
-                        workdir / "fireguard_events.csv"
-                    )
+                    csv_path = workdir / "fireguard_events.csv"
 
-                    input_path.write_bytes(
-                        video_bytes
-                    )
+                    input_path.write_bytes(video_bytes)
 
-                    # Use the validated integration settings.
                     result = run_video(
                         input_path=str(input_path),
                         output_path=str(output_path),
@@ -301,26 +198,27 @@ if uploaded is not None:
                         **PIPELINE_OPTIONS,
                     )
 
-                    # Read outputs before temporary cleanup.
-                    # Convert OpenCV MP4V output to browser-compatible H.264
+                    # Chuyển MP4V của OpenCV sang H.264 để trình duyệt phát được.
                     browser_video_path = workdir / "fireguard_browser.mp4"
-
-                    ffmpeg_exe = shutil.which("ffmpeg")
-
-                    if ffmpeg_exe is None:
-                        raise RuntimeError("Không tìm thấy FFmpeg trong PATH")
 
                     subprocess.run(
                         [
                             ffmpeg_exe,
                             "-y",
-                            "-loglevel", "error",
-                            "-i", str(output_path),
-                            "-c:v", "libx264",
-                            "-preset", "veryfast",
-                            "-crf", "23",
-                            "-pix_fmt", "yuv420p",
-                            "-movflags", "+faststart",
+                            "-loglevel",
+                            "error",
+                            "-i",
+                            str(output_path),
+                            "-c:v",
+                            "libx264",
+                            "-preset",
+                            "veryfast",
+                            "-crf",
+                            "23",
+                            "-pix_fmt",
+                            "yuv420p",
+                            "-movflags",
+                            "+faststart",
                             "-an",
                             str(browser_video_path),
                         ],
@@ -331,45 +229,29 @@ if uploaded is not None:
 
                     processed_video = browser_video_path.read_bytes()
 
-                    processed_csv = (
-                        csv_path.read_bytes()
-                    )
+                    processed_csv = csv_path.read_bytes()
 
-                    stats = analyze_csv(
-                        processed_csv,
-                        result["frames"],
-                    )
+                    stats = analyze_csv(processed_csv, result["frames"])
 
                     st.session_state.fireguard_result = {
                         "input_id": input_id,
                         "video": processed_video,
                         "csv": processed_csv,
                         "stats": stats,
-                        "filename": Path(uploaded.name).stem,
+                        "filename": f"{Path(uploaded.name).stem}_opencv_smoke",
                     }
 
-            st.success(
-                "Phân tích video hoàn tất!"
-            )
+            st.success("Phân tích video hoàn tất!")
 
         except Exception as exc:
 
             st.session_state.fireguard_result = None
 
-            st.error(
-                f"Không thể xử lý video: {exc}"
-            )
-
-    # ========================================================
-    # Display results
-    # ========================================================
+            st.error(f"Không thể xử lý video: {exc}")
 
     saved_result = st.session_state.fireguard_result
 
-    if (
-        saved_result is not None
-        and saved_result["input_id"] == input_id
-    ):
+    if saved_result is not None and saved_result["input_id"] == input_id:
 
         st.divider()
 
@@ -380,22 +262,13 @@ if uploaded is not None:
         metric_a, metric_b, metric_c = st.columns(3)
 
         with metric_a:
-            st.metric(
-                "Tổng số frame",
-                stats["total_frames"],
-            )
+            st.metric("Tổng số frame", stats["total_frames"])
 
         with metric_b:
-            st.metric(
-                "Frame phát hiện FIRE",
-                stats["fire_frames"],
-            )
+            st.metric("Frame phát hiện FIRE", stats["fire_frames"])
 
         with metric_c:
-            st.metric(
-                "Frame phát hiện SMOKE",
-                stats["smoke_frames"],
-            )
+            st.metric("Frame phát hiện SMOKE", stats["smoke_frames"])
 
         st.markdown("#### Thống kê bounding box")
 
@@ -417,15 +290,9 @@ if uploaded is not None:
 
         st.markdown("#### Video sau xử lý")
 
-        st.video(
-            saved_result["video"],
-            format="video/mp4",
-        )
+        st.video(saved_result["video"], format="video/mp4")
 
-        st.caption(
-            "Bounding box màu đỏ: FIRE. "
-            "Bounding box màu xanh: SMOKE."
-        )
+        st.caption("Bounding box màu đỏ: FIRE. " "Bounding box màu xanh: SMOKE.")
 
         st.divider()
 
@@ -455,25 +322,6 @@ if uploaded is not None:
                 use_container_width=True,
             )
 
-        st.caption(
-            "CSV chứa frame, thời điểm, loại đối tượng, "
-            "tọa độ bounding box và score của Region."
-        )
-
 else:
 
-    st.info(
-        "Tải một video để bắt đầu sử dụng FireGuard."
-    )
-
-
-# ============================================================
-# Footer
-# ============================================================
-
-st.divider()
-
-st.caption(
-    "FireGuard | Bài tập lớn Xử lý ảnh | "
-    "OpenCV + Python + Streamlit"
-)
+    st.info("Tải một video để bắt đầu sử dụng FireGuard.")

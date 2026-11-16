@@ -1,4 +1,5 @@
 """TV3 – Trích vùng liên thông và đặc trưng vùng từ mask nhị phân."""
+
 from dataclasses import dataclass
 
 import cv2
@@ -11,7 +12,7 @@ from .morphology import clean_mask
 
 @dataclass(frozen=True)
 class Region:
-    # 5 trường đầu giữ nguyên thứ tự theo INTERFACES.md; các trường sau có mặc định
+    # 5 trường đầu giữ nguyên thứ tự theo docs/WORKFLOW.md; các trường sau có mặc định
     # nên code cũ tạo Region(kind, bbox, area, centroid[, score]) vẫn chạy.
     kind: str
     bbox: tuple[int, int, int, int]
@@ -27,8 +28,18 @@ class Region:
 
 def _region_from_contour(contour: np.ndarray, kind: str) -> Region:
     f = shape_features(contour)
-    return Region(kind, f.bbox, f.area, f.centroid, 1.0,
-                  f.perimeter, f.circularity, f.solidity, f.aspect_ratio, f.extent)
+    return Region(
+        kind,
+        f.bbox,
+        f.area,
+        f.centroid,
+        1.0,
+        f.perimeter,
+        f.circularity,
+        f.solidity,
+        f.aspect_ratio,
+        f.extent,
+    )
 
 
 def extract_regions(mask, kind: str, cfg: Config, clean: bool = True) -> list[Region]:
@@ -47,8 +58,9 @@ def extract_regions(mask, kind: str, cfg: Config, clean: bool = True) -> list[Re
     return items
 
 
-def extract_regions_cc(mask, kind: str, cfg: Config, clean: bool = True,
-                       connectivity: int = 8) -> list[Region]:
+def extract_regions_cc(
+    mask, kind: str, cfg: Config, clean: bool = True, connectivity: int = 8
+) -> list[Region]:
     """Phương án so sánh dùng cv2.connectedComponentsWithStats.
 
     Diện tích ở đây là số pixel của thành phần (khác contourArea tính theo đa giác
@@ -58,23 +70,42 @@ def extract_regions_cc(mask, kind: str, cfg: Config, clean: bool = True,
     if clean:
         mask = clean_mask(mask, cfg)
     n, labels, stats, centroids = cv2.connectedComponentsWithStats(
-        (mask > 0).astype(np.uint8), connectivity=connectivity)
+        (mask > 0).astype(np.uint8), connectivity=connectivity
+    )
     items = []
     for label in range(1, n):  # 0 là nền
         x, y, w, h, area = (int(v) for v in stats[label])
         if area < cfg.min_region_area:
             continue
-        component = (labels[y:y + h, x:x + w] == label).astype(np.uint8)
-        contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        component = (labels[y : y + h, x : x + w] == label).astype(np.uint8)
+        contours, _ = cv2.findContours(
+            component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
         f = shape_features(max(contours, key=cv2.contourArea))
         cx, cy = centroids[label]
-        items.append(Region(kind, (x, y, w, h), float(area), (float(cx), float(cy)), 1.0,
-                            f.perimeter, f.circularity, f.solidity, f.aspect_ratio, f.extent))
+        items.append(
+            Region(
+                kind,
+                (x, y, w, h),
+                float(area),
+                (float(cx), float(cy)),
+                1.0,
+                f.perimeter,
+                f.circularity,
+                f.solidity,
+                f.aspect_ratio,
+                f.extent,
+            )
+        )
     return items
 
 
-def draw_regions(frame_bgr: np.ndarray, regions: list[Region], show_contour_info: bool = True,
-                 color_map: dict[str, tuple[int, int, int]] | None = None) -> np.ndarray:
+def draw_regions(
+    frame_bgr: np.ndarray,
+    regions: list[Region],
+    show_contour_info: bool = True,
+    color_map: dict[str, tuple[int, int, int]] | None = None,
+) -> np.ndarray:
     """Vẽ bbox + tâm + (tùy chọn) area/circularity để làm ảnh minh họa báo cáo."""
     color_map = color_map or {"fire": (0, 0, 255), "smoke": (255, 200, 0)}
     out = frame_bgr.copy()
@@ -85,5 +116,7 @@ def draw_regions(frame_bgr: np.ndarray, regions: list[Region], show_contour_info
         cv2.circle(out, (int(r.centroid[0]), int(r.centroid[1])), 3, col, -1)
         if show_contour_info:
             label = f"{r.kind} A={r.area:.0f} C={r.circularity:.2f}"
-            cv2.putText(out, label, (x, max(y - 5, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1)
+            cv2.putText(
+                out, label, (x, max(y - 5, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1
+            )
     return out

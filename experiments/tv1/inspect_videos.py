@@ -13,6 +13,7 @@ development/integration/test và điền data/manifest.csv.
 Lưu ý Windows: đường dẫn repo có dấu ("Học tập"). Script mở video bằng đường dẫn TƯƠNG ĐỐI
 so với thư mục hiện tại; nếu mở bằng đường dẫn tuyệt đối thất bại thì ghi chú vào cột note.
 """
+
 import argparse
 import csv
 import os
@@ -26,7 +27,18 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _utils import imwrite_unicode  # noqa: E402
 
-VIDEO_EXT = {".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".mpg", ".mpeg", ".m4v", ".3gp"}
+VIDEO_EXT = {
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+    ".flv",
+    ".wmv",
+    ".mpg",
+    ".mpeg",
+    ".m4v",
+    ".3gp",
+}
 OUT = ROOT / "experiments" / "tv1" / "results" / "dataset"
 THUMB_W, THUMB_H, ROWS_PER_SHEET = 240, 135, 12
 
@@ -55,9 +67,19 @@ def camera_shift(prev_gray, gray):
 
 
 def inspect(path: Path, n_frames: int):
-    row = {"path": os.path.relpath(path).replace("\\", "/"), "width": 0, "height": 0, "fps": 0.0,
-           "frames_meta": 0, "frames_read": 0, "duration_sec": 0.0,
-           "cam_shift_med": 0.0, "cam_shift_p90": 0.0, "ok": False, "note": ""}
+    row = {
+        "path": os.path.relpath(path).replace("\\", "/"),
+        "width": 0,
+        "height": 0,
+        "fps": 0.0,
+        "frames_meta": 0,
+        "frames_read": 0,
+        "duration_sec": 0.0,
+        "cam_shift_med": 0.0,
+        "cam_shift_p90": 0.0,
+        "ok": False,
+        "note": "",
+    }
     cap, row["note"] = open_video(path)
     if cap is None:
         return row, []
@@ -67,7 +89,7 @@ def inspect(path: Path, n_frames: int):
     row["frames_meta"] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     total = max(row["frames_meta"], 1)
     targets = {int((i + 0.5) * total / n_frames): i for i in range(n_frames)}
-    gap = max(1, round((row["fps"] or 25) / 2))          # so sánh 2 frame cách nhau ~0.5 s
+    gap = max(1, round((row["fps"] or 25) / 2))  # so sánh 2 frame cách nhau ~0.5 s
     thumbs = [np.zeros((THUMB_H, THUMB_W, 3), np.uint8)] * n_frames
     shifts, anchor, idx = [], None, 0
     # Đọc TUẦN TỰ (không tua) – tua bằng CAP_PROP_POS_FRAMES hay hỏng với một số codec .avi cũ
@@ -78,9 +100,13 @@ def inspect(path: Path, n_frames: int):
         if idx in targets:
             thumbs[targets[idx]] = cv2.resize(frame, (THUMB_W, THUMB_H))
         if idx % gap == 0:
-            gray = cv2.cvtColor(cv2.resize(frame, (320, 180)), cv2.COLOR_BGR2GRAY).astype(np.float32)
+            gray = cv2.cvtColor(
+                cv2.resize(frame, (320, 180)), cv2.COLOR_BGR2GRAY
+            ).astype(np.float32)
             if anchor is not None:
-                shifts.append(camera_shift(anchor, gray) * row["width"] / 320)  # đổi về pixel gốc
+                shifts.append(
+                    camera_shift(anchor, gray) * row["width"] / 320
+                )  # đổi về pixel gốc
             anchor = gray
         idx += 1
     cap.release()
@@ -105,7 +131,9 @@ def inspect(path: Path, n_frames: int):
 def sheet_row(name, thumbs):
     strip = np.hstack(thumbs)
     bar = np.zeros((22, strip.shape[1], 3), np.uint8)
-    cv2.putText(bar, name[-70:], (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.putText(
+        bar, name[-70:], (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1
+    )
     return np.vstack([bar, strip])
 
 
@@ -127,17 +155,21 @@ def main():
         rows.append(row)
         if thumbs:
             strips.append(sheet_row(row["path"], thumbs))
-        print(f"{'OK ' if row['ok'] else 'ERR'} {row['width']}x{row['height']} {row['fps']:>5}fps "
-              f"{row['duration_sec']:>6}s  shift med/p90 {row['cam_shift_med']:>5}/{row['cam_shift_p90']:<6} "
-              f"{Path(row['path']).name}  {row['note']}")
+        print(
+            f"{'OK ' if row['ok'] else 'ERR'} {row['width']}x{row['height']} {row['fps']:>5}fps "
+            f"{row['duration_sec']:>6}s  shift med/p90 {row['cam_shift_med']:>5}/{row['cam_shift_p90']:<6} "
+            f"{Path(row['path']).name}  {row['note']}"
+        )
 
     with (OUT / f"{tag}_overview.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
     for k in range(0, len(strips), ROWS_PER_SHEET):
-        imwrite_unicode(OUT / f"{tag}_sheet_{k // ROWS_PER_SHEET + 1:02d}.jpg",
-                        np.vstack(strips[k:k + ROWS_PER_SHEET]))
+        imwrite_unicode(
+            OUT / f"{tag}_sheet_{k // ROWS_PER_SHEET + 1:02d}.jpg",
+            np.vstack(strips[k : k + ROWS_PER_SHEET]),
+        )
     print(f"\n{sum(r['ok'] for r in rows)}/{len(rows)} video đọc được. Kết quả: {OUT}")
 
 

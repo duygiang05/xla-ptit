@@ -41,7 +41,7 @@ Tường và mây đứng yên: từ ~100% xuống ≤ 5% khi ghép với chuy�
    cao, có vân cuộn, kèm mask chuyển động đã nở, mới được tìm thấy ổn định. Đề xuất cho nhóm
    trưởng/TV2 (không tự sửa): cân nhắc với nhánh khói dùng `motion_dilate`, hoặc tích lũy chuyển
    động qua nhiều frame, hoặc ngưỡng chuyển động riêng thấp hơn – đúng như cảnh báo trong
-   `docs/INTERFACES.md` ("nhất là với khói ít chuyển động").
+   `docs/WORKFLOW.md` (hợp đồng dữ liệu và kiểm thử khói ít chuyển động).
 5. **Báo nhầm mới của nhánh khói sau khi ghép**: viền tường xám lộ ra khi lửa co lại hoặc xe
    chạy qua (~1.2 vùng/frame) – vừa xám vừa "chuyển động".
 6. MOG2 với tham số mặc định học nhanh ngọn lửa lập lòe thành nền (frames found 0.46) trong

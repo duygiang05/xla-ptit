@@ -4,6 +4,7 @@
 - Closing (dilate -> erode): lấp lỗ nhỏ, nối các mảnh gần nhau của cùng vùng.
 `clean_mask` (opening rồi closing) là hàm mặc định pipeline đang dùng.
 """
+
 import cv2
 import numpy as np
 
@@ -27,8 +28,13 @@ def make_kernel(size: int, shape: str = "ellipse") -> np.ndarray:
     return cv2.getStructuringElement(_SHAPES[shape], (size, size))
 
 
-def apply_morphology(mask: np.ndarray, ops: tuple[str, ...] = ("open", "close"),
-                     ksize: int = 3, shape: str = "ellipse", iterations: int = 1) -> np.ndarray:
+def apply_morphology(
+    mask: np.ndarray,
+    ops: tuple[str, ...] = ("open", "close"),
+    ksize: int = 3,
+    shape: str = "ellipse",
+    iterations: int = 1,
+) -> np.ndarray:
     """Áp dụng lần lượt các phép hình thái; `ops=()` trả về bản sao mask gốc."""
     kernel = make_kernel(ksize, shape)
     out = mask.copy()
@@ -41,8 +47,12 @@ def clean_mask(mask, cfg: Config):
     return apply_morphology(mask, ("open", "close"), cfg.morph_kernel, "ellipse")
 
 
-def combine_masks(color_mask: np.ndarray, motion_mask: np.ndarray, mode: str = "and",
-                  motion_dilate: int = 0) -> np.ndarray:
+def combine_masks(
+    color_mask: np.ndarray,
+    motion_mask: np.ndarray,
+    mode: str = "and",
+    motion_dilate: int = 0,
+) -> np.ndarray:
     """Kết hợp mask màu với mask chuyển động.
 
     mode='and'  : giao cứng (baseline của pipeline).
