@@ -1,7 +1,7 @@
 """Cấu hình OpenCV cho giao diện và CLI."""
 
 DEMO_OPTIONS = {
-    "fire_fusion": "and_dilate",
+    "fire_fusion": "adaptive_region_motion",
     "smoke_fusion": "region_motion",
     "motion_dilate": 5,
     "smoke_motion": "mog2",
@@ -17,7 +17,7 @@ DEMO_OPTIONS = {
 OPENCV_CONTEXT_OPTIONS = {
     "smoke_engine": "opencv_context",
     "smoke_motion": "mog2",
-    "smoke_fusion": "region_motion",
+    "smoke_fusion": "adaptive_region_motion",
     "smoke_motion_dilate": 9,
     "smoke_verify": "off",
     "smoke_vote_hits": 5,

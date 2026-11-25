@@ -13,6 +13,25 @@ from fireguard.shape.regions import Region
 from fireguard.motion.flow import moving_fraction
 
 
+def test_sky_motion_accepts_short_moving_plume_but_rejects_wide_band():
+    frame = np.full((100, 200, 3), 150, dtype=np.uint8)
+    mask = np.zeros((100, 200), dtype=np.uint8)
+    motion = np.zeros_like(mask)
+    mask[20:60, 70:130] = 255
+    motion[35:40, 90:95] = 255
+    plume = Region("smoke", (70, 20, 60, 40), 2400, (100, 40))
+    assert verify_context_regions(
+        [plume], frame, mask, True, motion_mask=motion, sky_motion_guided=True
+    ) == [plume]
+
+    mask[:, :] = 0
+    mask[10:70, 10:190] = 255
+    band = Region("smoke", (10, 10, 180, 60), 10800, (100, 40))
+    assert verify_context_regions(
+        [band], frame, mask, True, motion_mask=motion, sky_motion_guided=True
+    ) == []
+
+
 def test_context_candidates_are_binary_and_report_scene():
     frame = np.full((90, 160, 3), (70, 110, 170), dtype=np.uint8)
     frame[10:70, 20:100] = (150, 150, 150)
@@ -115,7 +134,7 @@ def test_aerial_tint_rejects_top_only_and_full_frame_regions():
     ) == [plume]
 
 
-def test_portrait_smoke_geometry_uses_content_width_and_rejects_fire_overlap():
+def test_portrait_smoke_geometry_keeps_region_overlapping_fire():
     frame = np.zeros((90, 160, 3), dtype=np.uint8)
     frame[:, 50:110] = 150
     mask = np.zeros((90, 160), dtype=np.uint8)
@@ -124,9 +143,9 @@ def test_portrait_smoke_geometry_uses_content_width_and_rejects_fire_overlap():
     flame = Region("fire", (60, 35, 40, 40), 1600, (80, 55))
     assert active_image_bounds(frame) == (50, 0, 60, 90)
     assert verify_context_regions([region], frame, mask, False) == [region]
-    assert (
-        verify_context_regions([region], frame, mask, False, fire_regions=[flame]) == []
-    )
+    assert verify_context_regions(
+        [region], frame, mask, False, fire_regions=[flame]
+    ) == [region]
 
 
 def test_dense_flow_region_fraction_uses_letterbox_offset():

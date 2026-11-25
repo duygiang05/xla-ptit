@@ -9,9 +9,11 @@ import subprocess
 import shutil
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from fireguard.pipeline import run_video
 from fireguard.presets import DEMO_OPTIONS, OPENCV_CONTEXT_OPTIONS
+from fireguard.video_sync import synchronized_video_html
 
 st.set_page_config(
     page_title="FireGuard | Fire & Smoke Detection",
@@ -55,6 +57,7 @@ st.caption("Phát hiện vùng nghi lửa và khói trong video bằng OpenCV.")
 st.divider()
 
 PIPELINE_OPTIONS = {**DEMO_OPTIONS, **OPENCV_CONTEXT_OPTIONS}
+DISPLAY_LAYOUT_VERSION = 4
 
 
 def find_usable_ffmpeg():
@@ -72,6 +75,22 @@ def find_usable_ffmpeg():
     except (OSError, subprocess.SubprocessError):
         return None
     return executable if probe.returncode == 0 else None
+
+
+def convert_for_browser(ffmpeg_exe: str, source: Path, destination: Path) -> bytes:
+    """Encode an OpenCV video for browser playback."""
+    subprocess.run(
+        [
+            ffmpeg_exe, "-y", "-loglevel", "error", "-i", str(source),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an",
+            str(destination),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return destination.read_bytes()
 
 
 if "fireguard_result" not in st.session_state:
@@ -132,7 +151,13 @@ if uploaded is not None:
 
     st.subheader("2. Phân tích video")
 
-    if st.session_state.fireguard_input_id != input_id:
+    if (
+        st.session_state.fireguard_input_id != input_id
+        or (
+            st.session_state.fireguard_result is not None
+            and st.session_state.fireguard_result.get("layout_version") != DISPLAY_LAYOUT_VERSION
+        )
+    ):
         st.session_state.fireguard_result = None
         st.session_state.fireguard_input_id = input_id
 
@@ -187,6 +212,8 @@ if uploaded is not None:
 
                     output_path = workdir / "fireguard_result.mp4"
 
+                    dashboard_path = workdir / "fireguard_dashboard.mp4"
+
                     csv_path = workdir / "fireguard_events.csv"
 
                     input_path.write_bytes(video_bytes)
@@ -195,39 +222,17 @@ if uploaded is not None:
                         input_path=str(input_path),
                         output_path=str(output_path),
                         csv_path=str(csv_path),
+                        dashboard_path=str(dashboard_path),
                         **PIPELINE_OPTIONS,
                     )
 
-                    # Chuyển MP4V của OpenCV sang H.264 để trình duyệt phát được.
-                    browser_video_path = workdir / "fireguard_browser.mp4"
-
-                    subprocess.run(
-                        [
-                            ffmpeg_exe,
-                            "-y",
-                            "-loglevel",
-                            "error",
-                            "-i",
-                            str(output_path),
-                            "-c:v",
-                            "libx264",
-                            "-preset",
-                            "veryfast",
-                            "-crf",
-                            "23",
-                            "-pix_fmt",
-                            "yuv420p",
-                            "-movflags",
-                            "+faststart",
-                            "-an",
-                            str(browser_video_path),
-                        ],
-                        check=True,
-                        capture_output=True,
-                        text=True,
+                    # Hai video có cùng FPS và số frame; video kết quả điều khiển video các bước.
+                    dashboard_video = convert_for_browser(
+                        ffmpeg_exe, dashboard_path, workdir / "dashboard_browser.mp4"
                     )
-
-                    processed_video = browser_video_path.read_bytes()
+                    processed_video = convert_for_browser(
+                        ffmpeg_exe, output_path, workdir / "fireguard_browser.mp4"
+                    )
 
                     processed_csv = csv_path.read_bytes()
 
@@ -235,7 +240,9 @@ if uploaded is not None:
 
                     st.session_state.fireguard_result = {
                         "input_id": input_id,
+                        "layout_version": DISPLAY_LAYOUT_VERSION,
                         "video": processed_video,
+                        "dashboard_video": dashboard_video,
                         "csv": processed_csv,
                         "stats": stats,
                         "filename": f"{Path(uploaded.name).stem}_opencv_smoke",
@@ -288,17 +295,27 @@ if uploaded is not None:
                 help="Tổng lượt bounding box SMOKE trên các frame.",
             )
 
-        st.markdown("#### Video sau xử lý")
+        st.markdown("#### Video sau xử lý và các bước")
 
-        st.video(saved_result["video"], format="video/mp4")
+        components.html(
+            synchronized_video_html(
+                saved_result["video"], saved_result["dashboard_video"]
+            ),
+            height=700,
+            scrolling=True,
+        )
 
-        st.caption("Bounding box màu đỏ: FIRE. " "Bounding box màu xanh: SMOKE.")
+        st.caption(
+            "Bên trái là video kết quả; bên phải là các bước FIRE/SMOKE. "
+            "Phát, dừng hoặc tua ở video kết quả để đồng bộ video các bước. "
+            "TV1/TV2/Fusion là mask; TV3 và Temporal hiển thị vùng."
+        )
 
         st.divider()
 
         st.subheader("4. Tải kết quả")
 
-        download_a, download_b = st.columns(2)
+        download_a, download_b, download_c = st.columns(3)
 
         filename = saved_result["filename"]
 
@@ -319,6 +336,16 @@ if uploaded is not None:
                 data=saved_result["csv"],
                 file_name=f"{filename}_fireguard.csv",
                 mime="text/csv",
+                use_container_width=True,
+            )
+
+        with download_c:
+
+            st.download_button(
+                label="⬇ Tải video các bước (.mp4)",
+                data=saved_result["dashboard_video"],
+                file_name=f"{filename}_pipeline.mp4",
+                mime="video/mp4",
                 use_container_width=True,
             )
 

@@ -18,6 +18,7 @@ from .motion import MotionDetector, MOG2MotionDetector
 from .motion.flow import dense_flow_in_bounds
 from .fusion import fuse_masks
 from .shape import extract_regions
+from .shape.regions import draw_regions
 from .shape.grouping import union_regions
 from .shape.context_verify import (
     active_image_bounds,
@@ -26,8 +27,9 @@ from .shape.context_verify import (
 )
 from .temporal import TemporalFilter
 from .presets import DEMO_OPTIONS
+from .visualization import compose_pipeline_frame, dashboard_size
 
-FUSION_MODES = ("and", "and_dilate", "color_only", "region_motion")
+FUSION_MODES = ("and", "and_dilate", "color_only", "sky_motion", "region_motion", "adaptive_region_motion")
 
 SMOKE_VERIFY_MODES = ("off", "shape_edge")
 
@@ -116,8 +118,9 @@ def run_video(
     csv_path: str | None = None,
     cfg: Config | None = None,
     *,
+    dashboard_path: str | None = None,
     fire_fusion: str = "and",
-    smoke_fusion: str = "and",
+    smoke_fusion: str | None = None,
     motion_dilate: int = 5,
     smoke_motion: str = "frame_diff",
     smoke_motion_dilate: int | None = None,
@@ -125,6 +128,9 @@ def run_video(
     smoke_region_motion_ratio: float = 0.015,
     smoke_region_min_motion_pixels: int = 12,
     smoke_region_min_area: int = 130,
+    smoke_region_max_area_ratio: float = 0.50,
+    smoke_growth_kernel: int = 5,
+    smoke_growth_iterations: int = 8,
     smoke_temporal_mode: str = "vote",
     smoke_verify: str = "off",
     smoke_max_aspect_ratio: float = 1.10,
@@ -149,6 +155,10 @@ def run_video(
 
     if smoke_engine not in ("classical", "opencv_context"):
         raise ValueError("smoke_engine must be 'classical' or 'opencv_context'")
+    if smoke_fusion is None:
+        smoke_fusion = (
+            "adaptive_region_motion" if smoke_engine == "opencv_context" else "and"
+        )
     if smoke_vote_hits is not None and not 1 <= smoke_vote_hits <= cfg.vote_window:
         raise ValueError("smoke_vote_hits must be within the vote window")
 
@@ -191,6 +201,25 @@ def run_video(
     if not writer.isOpened():
         cap.release()
         raise ValueError(f"Cannot write output video: {output_path}")
+
+    dashboard_writer = None
+    if dashboard_path is not None:
+        dashboard_output = Path(dashboard_path)
+        if dashboard_output.resolve() == out_path.resolve():
+            cap.release()
+            writer.release()
+            raise ValueError("dashboard_path must differ from output_path")
+        dashboard_output.parent.mkdir(parents=True, exist_ok=True)
+        dashboard_writer = cv2.VideoWriter(
+            str(dashboard_output),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            dashboard_size(),
+        )
+        if not dashboard_writer.isOpened():
+            cap.release()
+            writer.release()
+            raise ValueError(f"Cannot write dashboard video: {dashboard_path}")
 
     # TV2: tạo bộ phát hiện chuyển động riêng cho hai nhánh.
 
@@ -283,9 +312,13 @@ def run_video(
                         "and_dilate"
                         if context_aerial_tint
                         else (
-                            "color_only"
+                            "sky_motion"
                             if context_sky_scene
-                            else "and_dilate" if portrait_context else "region_motion"
+                            else (
+                                "and_dilate"
+                                if portrait_context
+                                else smoke_fusion
+                            )
                         )
                     )
                     if smoke_engine == "opencv_context"
@@ -295,15 +328,19 @@ def run_video(
                     21
                     if context_aerial_tint
                     else (
-                        13
-                        if portrait_context and not context_sky_scene
-                        else smoke_motion_dilate
+                        41
+                        if context_sky_scene
+                        else (13 if portrait_context else smoke_motion_dilate)
                     )
                 ),
                 region_close=smoke_region_close,
                 region_motion_ratio=smoke_region_motion_ratio,
                 region_min_motion_pixels=smoke_region_min_motion_pixels,
                 region_min_area=smoke_region_min_area,
+                region_max_area_ratio=smoke_region_max_area_ratio,
+                active_bounds=active_bounds,
+                growth_kernel=smoke_growth_kernel,
+                growth_iterations=smoke_growth_iterations,
             )
 
             # TV3: làm sạch mask và trích vùng.
@@ -331,6 +368,7 @@ def run_video(
                     motion_mask=smoke_movement,
                     fire_regions=fire_regions,
                     portrait_flow=portrait_flow,
+                    sky_motion_guided=context_sky_scene,
                 )
                 if context_sky_scene and cv2.countNonZero(context_lower_smoke):
                     lower_motion = cv2.dilate(
@@ -420,11 +458,41 @@ def run_video(
 
             writer.write(annotated)
 
+            if dashboard_writer is not None:
+                dashboard_writer.write(
+                    compose_pipeline_frame(
+                        {
+                            "fire_color": colors["fire"],
+                            "smoke_color": colors["smoke"],
+                            "fire_motion": fire_movement,
+                            "smoke_motion": smoke_movement,
+                            "fire_fusion": fire_mask,
+                            "smoke_fusion": smoke_mask,
+                            "fire_regions": draw_regions(
+                                frame, fire_regions, show_contour_info=False
+                            ),
+                            "smoke_regions": draw_regions(
+                                frame, smoke_regions, show_contour_info=False
+                            ),
+                            "fire_temporal": draw_regions(
+                                frame, confirmed_fire, show_contour_info=False
+                            ),
+                            "smoke_temporal": draw_regions(
+                                frame, confirmed_smoke, show_contour_info=False
+                            ),
+                        },
+                        frame_no,
+                        fps,
+                    )
+                )
+
             frame_no += 1
 
     finally:
         cap.release()
         writer.release()
+        if dashboard_writer is not None:
+            dashboard_writer.release()
 
     if frame_no == 0:
         raise ValueError(f"Video contains no decodable frames: {input_path}")
@@ -454,11 +522,14 @@ def run_video(
 
             csv_writer.writerows(events)
 
-    return {
+    result = {
         "frames": frame_no,
         "event_rows": len(events),
         "output_video": str(out_path),
     }
+    if dashboard_path is not None:
+        result["dashboard_video"] = str(dashboard_path)
+    return result
 
 
 # Giao diện dòng lệnh.
@@ -482,7 +553,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--smoke-fusion",
         choices=FUSION_MODES,
-        default=DEMO_OPTIONS["smoke_fusion"],
+        default=None,
     )
 
     parser.add_argument(
@@ -512,6 +583,9 @@ if __name__ == "__main__":
     parser.add_argument("--smoke-region-min-motion-pixels", type=int, default=12)
 
     parser.add_argument("--smoke-region-min-area", type=int, default=130)
+    parser.add_argument("--smoke-region-max-area-ratio", type=float, default=0.50)
+    parser.add_argument("--smoke-growth-kernel", type=int, default=5)
+    parser.add_argument("--smoke-growth-iterations", type=int, default=8)
 
     # Quyết định theo thời gian cho khói.
 
@@ -567,7 +641,14 @@ if __name__ == "__main__":
         args.output,
         args.csv,
         fire_fusion=args.fire_fusion,
-        smoke_fusion=args.smoke_fusion,
+        smoke_fusion=(
+            args.smoke_fusion
+            or (
+                "adaptive_region_motion"
+                if args.smoke_engine == "opencv_context"
+                else DEMO_OPTIONS["smoke_fusion"]
+            )
+        ),
         motion_dilate=args.motion_dilate,
         smoke_motion=args.smoke_motion,
         smoke_motion_dilate=args.smoke_motion_dilate,
@@ -575,6 +656,9 @@ if __name__ == "__main__":
         smoke_region_motion_ratio=args.smoke_region_motion_ratio,
         smoke_region_min_motion_pixels=(args.smoke_region_min_motion_pixels),
         smoke_region_min_area=args.smoke_region_min_area,
+        smoke_region_max_area_ratio=args.smoke_region_max_area_ratio,
+        smoke_growth_kernel=args.smoke_growth_kernel,
+        smoke_growth_iterations=args.smoke_growth_iterations,
         smoke_temporal_mode=args.smoke_temporal_mode,
         smoke_verify=args.smoke_verify,
         smoke_max_aspect_ratio=args.smoke_max_aspect_ratio,
